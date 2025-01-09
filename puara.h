@@ -20,140 +20,144 @@
 #include <iomanip>
 #include <vector>
 #include <unordered_map>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/event_groups.h>
-#include <esp_system.h>
-#include <esp_spi_flash.h>
-#include <esp_wifi.h>
-#include <nvs_flash.h>
-#include <sys/param.h>
-#include <esp_err.h>
-#include <esp_spiffs.h>
-#include <cJSON.h>
-#include <esp_http_server.h>
-#include <driver/uart.h>
-#include <mdns.h>
-#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
-#include <driver/usb_serial_jtag.h> // jtag module
+
+
+// Need to be included for Zephyr Shell Commands
+#include <zephyr/kernel.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/shell/shell.h>
+
+// Needed for zephyr wifi connection
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_event.h>
+#include <zephyr/net/wifi_mgmt.h>
+#include <zephyr/net/dhcpv4_server.h>
+
+// Needed for settings
+#include <zephyr/settings/settings.h>
+#if defined(CONFIG_SETTINGS_FILE)
+#include <zephyr/fs/fs.h>
+#include <zephyr/fs/littlefs.h>
 #endif
-#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
-#include "esp32-hal-tinyusb.h"
-#endif
 
-// The following libraries need to be included if using the espidf framework:
-#include <esp_log.h>
-#include <sys/unistd.h>
-#include <sys/stat.h>
-#include <lwip/err.h>
-#include <lwip/sys.h>
-#include <esp_event.h>
-#include <soc/uart_struct.h>
-#include "esp_console.h"
+#define STORAGE_PARTITION	storage_partition
+#define STORAGE_PARTITION_ID	FIXED_PARTITION_ID(STORAGE_PARTITION)
+#define PUARA_MAX_CONFIG_LENGTH 32
 
+// Needed for power control
+#include <zephyr/sys/reboot.h>
 
+// Settings structure
+struct settingsVariables {
+    std::string name;
+    std::string type;
+    std::string textValue;
+    double numberValue;
+};
+
+// MACROS for ease of use
+enum puara_keys {
+    SSID = 1,
+    AP_PASSWORD = 2,
+    OSC_IP1 = 4,
+    OSC_PORT1 = 5,
+    OSC_IP2 = 6,
+    OSC_PORT2 = 7,
+    PASSWORD = 8
+};
+
+// Wifi event handler
 class Puara {
-    
     private:
-        static unsigned int version;
-        static std::string dmiName;
+        unsigned int version;
+        std::string dmiName = "puara";
+        
+        std::vector<settingsVariables> variables;
+        std::unordered_map<std::string,int> variables_fields;
 
-        struct settingsVariables {
-            std::string name;
-            std::string type;
-            std::string textValue;
-            double numberValue;
+        std::unordered_map<std::string,int> config_fields = {
+            {"SSID",1},
+            {"APpasswd",2},
+            {"APpasswdValidate",3},
+            {"oscIP1",4},
+            {"oscPORT1",5},
+            {"oscIP2",6},
+            {"oscPORT2",7},
+            {"password",8},
+            {"reboot",9},
+            {"persistentAP",10},
+            {"localPORT",11}
         };
-        
-        static std::vector<settingsVariables> variables;
-        static std::unordered_map<std::string,int> variables_fields;
 
-        static std::unordered_map<std::string,int> config_fields;
-        static std::string device;
-        static unsigned int id;
-        static std::string author;
-        static std::string institution;
-        static std::string APpasswd;
-        static std::string APpasswdVal1;
-        static std::string APpasswdVal2;
-        static std::string wifiSSID;
-        static std::string wifiPSK;
-        static bool persistentAP;
-        static std::string oscIP1;
+        std::string device;
+        unsigned int id;
+        std::string author;
+        std::string institution;
+        static char APpasswd[PUARA_MAX_CONFIG_LENGTH];
+        static char wifiSSID[PUARA_MAX_CONFIG_LENGTH];
+        static char wifiPSK[PUARA_MAX_CONFIG_LENGTH];
+        static char oscIP1[PUARA_MAX_CONFIG_LENGTH];
+        static char oscIP2[PUARA_MAX_CONFIG_LENGTH];
         static unsigned int oscPORT1;
-        static std::string oscIP2;
         static unsigned int oscPORT2;
-        static unsigned int localPORT;
+        unsigned int localPORT;
         
-        static bool StaIsConnected;
-        static bool ApStarted;
-        static std::string currentSSID;
-        static std::string currentSTA_IP;
-        static std::string currentSTA_MAC;
-        static std::string currentAP_IP;
-        static std::string currentAP_MAC;
-        static const int wifiScanSize = 20;
-        static std::string wifiAvailableSsid;
-
-        static EventGroupHandle_t s_wifi_event_group;
-        static const int wifi_connected_bit = BIT0;
-        static const int wifi_fail_bit = BIT1;
+        bool StaIsConnected;
+        bool ApStarted;
+        static bool persistentAP;
+        std::string currentSSID;
+        std::string currentSTA_IP;
+        std::string currentSTA_MAC;
+        std::string currentAP_IP;
+        std::string currentAP_MAC;
+        const int wifiScanSize = 20;
+        std::string wifiAvailableSsid;
         
-        static wifi_config_t wifi_config_sta;
-        static wifi_config_t wifi_config_ap;
-        static const short int channel = 6;
-        static const short int max_connection = 5;
-        static const short int wifi_maximum_retry = 5;
-        static short int connect_counter;
-        static void sta_event_handler(void* arg, esp_event_base_t event_base, int event_id, void* event_data);
-        static void ap_event_handler(void* arg, esp_event_base_t event_base, int event_id, void* event_data);
-        static void wifi_init();
+        // Wifi properties
+        static bool wifi_enabled;
+        static bool ap_enabled;
+        struct net_if *sta_iface;
+        struct net_if *ap_iface;
+        struct net_mgmt_event_callback cb;
+        wifi_connect_req_params wifi_config_sta;
+        wifi_connect_req_params wifi_config_ap;
+        const short int channel = 6;
+        const short int max_connection = 5;
+        const short int wifi_maximum_retry = 5;
+        short int connect_counter;
 
-        static std::string serial_data_str_buffer;
-        static void read_settings_json_internal(std::string& contents, bool merge=false);
-        static void read_config_json_internal(std::string& contents);
-        static void merge_settings_json(std::string& new_contents);
+        // Storage settings
+        const bool spiffs_format_if_mount_failed = false;
+        std::string config_str = "config/";
+        static char tmp_setting[PUARA_MAX_CONFIG_LENGTH];
 
-        static httpd_handle_t webserver;
-        static httpd_config_t webserver_config;
-        static httpd_uri_t index;
-        static httpd_uri_t style;
-        //static httpd_uri_t factory;
-        static httpd_uri_t reboot;
-        static httpd_uri_t scan;
-        // static httpd_uri_t update;
-        static httpd_uri_t indexpost;
-        static httpd_uri_t settings;
-        static httpd_uri_t settingspost;
-        static esp_err_t index_get_handler(httpd_req_t *req);
-        static esp_err_t get_handler(httpd_req_t *req);
-        static esp_err_t style_get_handler(httpd_req_t *req);
-        static esp_err_t settings_get_handler(httpd_req_t *req);
-        static esp_err_t settings_post_handler(httpd_req_t *req);
-        static esp_err_t scan_get_handler(httpd_req_t *req);
-        static esp_err_t index_post_handler(httpd_req_t *req);
-        static std::string prepare_index();
-        static void find_and_replace(std::string old_text, std::string new_text, std::string &str);
-        static void find_and_replace(std::string old_text, double new_number, std::string &str);
-        static void find_and_replace(std::string old_text, unsigned int new_number, std::string &str);
-        static void checkmark(std::string old_text, bool value, std::string & str);
-        static esp_vfs_spiffs_conf_t spiffs_config;
-        static std::string spiffs_base_path;
-        static const uint8_t spiffs_max_files = 10;
-        static const bool spiffs_format_if_mount_failed = false;
+        // Wifi Setup
+        void wifi_init();
+        static void wifi_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event, struct net_if *iface);
+        void enable_dhcpv4_server();
 
-        static char serial_data[PUARA_SERIAL_BUFSIZE];
-        static int serial_data_length;
-        static std::string serial_data_str;
-        static std::string serial_config_str;
-        static std::string convertToString(char* a);
-        static void interpret_serial(void *pvParameters);
-        static void uart_monitor(void *pvParameters);
-        static void jtag_monitor(void *pvParameters);
-        static void usb_monitor(void *pvParameters);
-        static const int reboot_delay = 3000;
-        static void reboot_with_delay(void *pvParameter);
-        static std::string urlDecode(std::string text);
+        // Storage handlers
+        static int puara_config_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg);
+        struct settings_handler puara_config = {
+            .name = "config",
+            .h_set = puara_config_set,
+        };
+
+        // Get JSON values
+        void read_settings_json_internal(std::string& contents, bool merge=false);
+        void read_config_json_internal(std::string& contents);
+        void merge_settings_json(std::string& new_contents);
+
+        // Webserver helpers
+        std::string prepare_index();
+        void find_and_replace(std::string old_text, std::string new_text, std::string &str);
+        void find_and_replace(std::string old_text, double new_number, std::string &str);
+        void find_and_replace(std::string old_text, unsigned int new_number, std::string &str);
+        void checkmark(std::string old_text, bool value, std::string & str);
+
+        // Reboot functions
+        const int reboot_delay = 3000;
+        std::string urlDecode(std::string text);
     
     public:
         // Monitor types
@@ -163,43 +167,72 @@ class Puara {
             USB_MONITOR = 2
         };
 
-        static void start(Monitors monitor = UART_MONITOR); 
-        static void config_spiffs();
-        static httpd_handle_t start_webserver(void);
-        static void stop_webserver(void);
-        static void start_wifi();
+        void start(Monitors monitor = UART_MONITOR); 
+        
+        int start_webserver(void);
+        void stop_webserver(void);
+        void start_wifi();
         std::string get_dmi_name();
-        static unsigned int get_version();
-        static void set_version(unsigned int user_version);
-        static std::string getIP1();
-        static std::string getIP2();
-        static int unsigned getPORT1();
-        static int unsigned getPORT2();
-        static std::string getPORT1Str();
-        static std::string getPORT2Str();
-        static int unsigned getLocalPORT();
-        static std::string getLocalPORTStr();
-        static void mount_spiffs();
-        static void unmount_spiffs();
-        static const std::string data_start;
-        static const std::string data_end;
-        static void read_config_json();
-        static void write_config_json();
-        static void read_settings_json();
-        static void write_settings_json();
-        static bool start_serial_listening();
-        static void send_serial_data(std::string data);
-        static void start_mdns_service(const char * device_name, const char * instance_name);
-        static void start_mdns_service(std::string device_name, std::string instance_name);
-        static void wifi_scan(void);
-        static bool get_StaIsConnected();
-        static double getVarNumber (std::string varName);
-        static std::string getVarText(std::string varName);
-        static bool IP1_ready();
-        static bool IP2_ready();
+        unsigned int get_version();
+        void set_version(unsigned int user_version);
+        std::string getIP1();
+        std::string getIP2();
+        int unsigned getPORT1();
+        int unsigned getPORT2();
+        std::string getPORT1Str();
+        std::string getPORT2Str();
+        int unsigned getLocalPORT();
+        std::string getLocalPORTStr();
+        void mount_spiffs();
+        void unmount_spiffs();
+        const std::string data_start = "<<<";
+        const std::string data_end = ">>>";
+        void read_config_json();
+        void write_config_json();
+        void read_settings_json();
+        void write_settings_json();
+        void send_serial_data(std::string data);
+
+        // Wifi methods
+        void start_mdns_service(const char * device_name, const char * instance_name);
+        void start_mdns_service(std::string device_name, std::string instance_name);
+        void wifi_scan();
+        void sta_connect();
+        void ap_connect();
+        bool get_StaIsConnected();
+        bool IP1_ready();
+        bool IP2_ready();
+
+        // Convertion method
+        std::string convertToString(char* a);
+
+        // Storage methods
+        // Saving values
+        int saveVar(std::string varName, double varValue);
+        int saveVar(std::string varName, std::string varValue);
+        int saveConfig(std::string varName, int varValue);
+        int saveConfig(std::string varName, const char *varValue);
+        
+        // Retrieving values
+        double getVarNumber (std::string varName);
+        std::string getVarText(std::string varName);
+        double getConfigNumber (std::string varName);
+        std::string getConfigText(std::string varName);
+
+        // Retrieving and sending config/settings data
+        int set(settingsVariables var);
+        int get(settingsVariables *var);
+
+        // Setup storage
+        void config_storage();
+
+        // Reboot system
+        void reboot_with_delay();
 
         // Set default monitor as UART
-        static int module_monitor;
+        int module_monitor = UART_MONITOR;
 };
 
+// instantiate the class to be used in main.cpp and puara_console.cpp
+extern Puara puara_module;
 #endif
