@@ -37,6 +37,8 @@ static int parse_setting_args_set(const struct shell *sh, size_t argc, char *arg
 	int opt_index = 0;
     struct getopt_state *state;
     static const struct option set_options[] = {
+                {"name", required_argument, 0, 'n'},
+                {"id", required_argument, 0, 'd'},
 		{"ssid", required_argument, 0, 's'},
 		{"ssid_password", required_argument, 0, 'p'},
 		{"ap_password", required_argument, 0, 'a'},
@@ -47,9 +49,17 @@ static int parse_setting_args_set(const struct shell *sh, size_t argc, char *arg
 		{0, 0, 0, 0}
     };
 
-    while ((opt = getopt_long(argc, argv, "s:p:a:i:o:r:t:", set_options, &opt_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "n:d:s:p:a:i:o:r:t:", set_options, &opt_index)) != -1) {
         state = getopt_state_get();
         switch (opt) {
+        case 'n':
+                var->name = "DeviceName";
+                var->textValue = state->optarg;
+                break;
+        case 'd':
+                var->name = "DeviceID";
+                var->numberValue = atoi(state->optarg);
+                break;
         case 's':
                 var->name = "SSID";
                 var->textValue = state->optarg;
@@ -94,6 +104,8 @@ static int parse_setting_args_get(const struct shell *sh, size_t argc, char *arg
 	int opt_index = 0;
     struct getopt_state *state;
     static const struct option get_options[] = {
+                {"name", required_argument, 0, 'n'},
+                {"id", required_argument, 0, 'd'},
 		{"ssid", no_argument, 0, 's'},
 		{"ssid_password", no_argument, 0, 'p'},
 		{"ap_password", no_argument, 0, 'a'},
@@ -107,6 +119,12 @@ static int parse_setting_args_get(const struct shell *sh, size_t argc, char *arg
     while ((opt = getopt_long(argc, argv, "spaiort", get_options, &opt_index)) != -1) {
         state = getopt_state_get();
         switch (opt) {
+        case 'n':
+                var->name = "DeviceName";
+                break;
+        case 'd':
+                var->name = "DeviceID";
+                break;
         case 's':
                 var->name = "SSID";
                 break;
@@ -180,6 +198,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_puara_commands,
         SHELL_CMD(ping, NULL, "Ping command.", cmd_puara_ping),
         SHELL_CMD(whoareyou, NULL, "Returns device name.", cmd_whoareyou),
         SHELL_CMD(set, NULL, "Set device setting\n"
+                                "[-n --name]: Device Name\n"
+                                "[-d --id]: Device ID\n"
                                 "<-s --ssid \"<SSID>\">: SSID.\n"
                                 "[-p, --psk]: SSID Password (valid only for secure SSIDs)\n"
                                 "[-a, --apsk]: AP Password\n"
@@ -188,7 +208,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_puara_commands,
                                 "[-r, --port1]: OSC port for IP address 1\n"
                                 "[-t, --port2]: OSC port for IP address 2\n",
                                 cmd_set),
-        SHELL_CMD(get, NULL, "Set device setting\n"
+        SHELL_CMD(get, NULL, "Get device setting\n"
+                                "[-n --name]: Device Name\n"
+                                "[-d --id]: Device ID\n"
                                 "<-s --ssid \"<SSID>\">: SSID.\n"
                                 "[-p, --psk]: SSID Password (valid only for secure SSIDs)\n"
                                 "[-a, --apsk]: AP Password\n"

@@ -43,6 +43,7 @@
 #define STORAGE_PARTITION	storage_partition
 #define STORAGE_PARTITION_ID	FIXED_PARTITION_ID(STORAGE_PARTITION)
 #define PUARA_MAX_CONFIG_LENGTH 32
+#define PUARA_MAX_ID_LENGTH 3
 
 // Needed for power control
 #include <zephyr/sys/reboot.h>
@@ -63,19 +64,22 @@ enum puara_keys {
     OSC_PORT1 = 5,
     OSC_IP2 = 6,
     OSC_PORT2 = 7,
-    PASSWORD = 8
+    PASSWORD = 8,
+    DEVICE_NAME = 12,
+    DEVICE_ID = 13,
 };
 
 // Wifi event handler
 class Puara {
     private:
         unsigned int version;
-        std::string dmiName = "puara";
-        
+        std::string dmiName = "Puara_0";
+
         std::vector<settingsVariables> variables;
         std::unordered_map<std::string,int> variables_fields;
 
         std::unordered_map<std::string,int> config_fields = {
+            // Networking Settings
             {"SSID",1},
             {"APpasswd",2},
             {"APpasswdValidate",3},
@@ -86,11 +90,12 @@ class Puara {
             {"password",8},
             {"reboot",9},
             {"persistentAP",10},
-            {"localPORT",11}
+            {"localPORT",11},
+            // Device settings
+            {"DeviceName", 12},
+            {"DeviceID", 13},
         };
 
-        std::string device;
-        unsigned int id;
         std::string author;
         std::string institution;
         static char APpasswd[PUARA_MAX_CONFIG_LENGTH];
@@ -98,9 +103,11 @@ class Puara {
         static char wifiPSK[PUARA_MAX_CONFIG_LENGTH];
         static char oscIP1[PUARA_MAX_CONFIG_LENGTH];
         static char oscIP2[PUARA_MAX_CONFIG_LENGTH];
-        static unsigned int oscPORT1;
-        static unsigned int oscPORT2;
-        unsigned int localPORT;
+        static char device[PUARA_MAX_CONFIG_LENGTH];
+        static int oscPORT1;
+        static int oscPORT2;
+        static int id;
+        int localPORT;
         
         bool StaIsConnected;
         bool ApStarted;
@@ -133,7 +140,7 @@ class Puara {
 
         // Wifi Setup
         void wifi_init();
-        static void wifi_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event, struct net_if *iface);
+        static void wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface);
         void enable_dhcpv4_server();
 
         // Storage handlers

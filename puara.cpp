@@ -32,8 +32,10 @@ char Puara::wifiSSID[PUARA_MAX_CONFIG_LENGTH] = "tstick_network";
 char Puara::wifiPSK[PUARA_MAX_CONFIG_LENGTH] = "mappings";
 char Puara::oscIP1[PUARA_MAX_CONFIG_LENGTH] = "192.168.137.1";
 char Puara::oscIP2[PUARA_MAX_CONFIG_LENGTH] = "0.0.0.0";
-unsigned int Puara::oscPORT1 = 8000;
-unsigned int Puara::oscPORT2 = 8000;
+char Puara::device[PUARA_MAX_CONFIG_LENGTH] = "Puara";
+int Puara::oscPORT1 = 8000;
+int Puara::oscPORT2 = 8000;
+int Puara::id = 1;
 
 unsigned int Puara::get_version() {
     return version;
@@ -66,7 +68,7 @@ void Puara::start(Monitors monitor) {
     wifi_scan();
 
     module_monitor = monitor;
-    
+
     // some delay added as start listening blocks the hw monitor
     std::cout << "Puara Start Done!\n\n  Type \"reboot\" in the serial monitor to reset the ESP32.\n\n";
 }
@@ -115,19 +117,41 @@ void Puara::wifi_init() {
     }
     LOG_INF("AP: is initialized");
 
+    // Disable Power saving
+    struct wifi_ps_params params;
+    params.enabled = WIFI_PS_DISABLED;
+    params.type = WIFI_PS_PARAM_STATE;
+    
+    // Request disabling power saving
+    if (net_mgmt(NET_REQUEST_WIFI_PS, sta_iface, &params, sizeof(params))) {
+		LOG_INF("PS %s failed. Reason: %s\n",
+			   params.enabled ? "enable" : "disable",
+			   wifi_ps_get_config_err_code_str(params.fail_reason));
+	}
+
     // Connect to wifi
     sta_connect();
+
+    // Enabled access point
+    ap_connect();
 }
 
 void Puara::start_wifi() {
 
     ApStarted = false;
 
-    // Check if wifiSSID is empty and wifiPSK have less than 8 characteres
-    if (dmiName.empty() ) {
+    // Check if device name is empty
+    if (strlen(device) == 0) {
         std::cout << "start_wifi: Module name unpopulated. Using default name: Puara" << std::endl;
-       dmiName = "Puara";
+        strcpy(device,"Puara");
     }
+
+    // Create dmiName from device name and ID
+    std::stringstream tempBuf;
+    tempBuf << Puara::device << "_" << std::setfill('0') << std::setw(PUARA_MAX_ID_LENGTH) << Puara::id;
+    Puara::dmiName = tempBuf.str();
+
+    // Check if wifiSSID is empty and wifiPSK have less than 8 characteres
     if ( strlen(APpasswd) < 8) {
         std::cout 
         << "startWifi: AP password error. Possible causes:" << "\n"
@@ -775,13 +799,38 @@ std::string Puara::urlDecode(std::string text) {
 }
 
 bool Puara::get_StaIsConnected() {
-    StaIsConnected = wifi_enabled && !ap_enabled;
+    StaIsConnected = wifi_enabled;
     return StaIsConnected;
 }
 
 int Puara::puara_config_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
     const char *next;
     int rc;
+    if (settings_name_steq(name, "DeviceName", &next) && !next) {
+        if (len > (sizeof(device) - 1)) {
+            printk("Length %d\n", len);
+            return -EINVAL;
+        }
+
+        rc = read_cb(cb_arg, &device, sizeof(device));
+        if (rc >= 0) {
+            return 0;
+        }
+
+        return rc;
+    }
+    if (settings_name_steq(name, "DeviceID", &next) && !next) {
+        if (len > (sizeof(id) - 1)) {
+            return -EINVAL;
+        }
+
+        rc = read_cb(cb_arg, &id, sizeof(id));
+        if (rc >= 0) {
+            return 0;
+        }
+
+        return rc;
+    }
     if (settings_name_steq(name, "SSID", &next) && !next) {
         if (len > (sizeof(wifiSSID) - 1)) {
             printk("Length %d\n", len);
@@ -897,6 +946,10 @@ int Puara::saveConfig(std::string varName, int varValue) {
             oscPORT2 = varValue;
             settings_save_one(config_str.c_str(), &oscPORT2, sizeof(oscPORT2));
             break;
+        case puara_keys::DEVICE_ID:
+            id = varValue;
+            settings_save_one(config_str.c_str(), &id, sizeof(id));
+            break; 
         default:
             return -1;
     }
@@ -930,6 +983,10 @@ int Puara::saveConfig(std::string varName, const char *varValue) {
             strcpy(oscIP2,varValue);
             settings_save_one(config_str.c_str(), &oscIP2, strlen(oscIP2));
             break;
+        case puara_keys::DEVICE_NAME:
+            strcpy(device,varValue);
+            settings_save_one(config_str.c_str(), &device, strlen(device));
+            break;
         default:
             return -1;
     }
@@ -942,19 +999,22 @@ int Puara::set(settingsVariables var) {
 
     switch (storage_key)
     { 
+        // Text Settings
         case puara_keys::SSID:
         case puara_keys::PASSWORD:
         case puara_keys::AP_PASSWORD:
         case puara_keys::OSC_IP1:
         case puara_keys::OSC_IP2:
+        case puara_keys::DEVICE_NAME:
             ret = saveConfig(var.name, var.textValue.c_str());
             if (ret) {
                 return -1;
             }
             break;
+        // Numerical Settings
         case puara_keys::OSC_PORT1:
         case puara_keys::OSC_PORT2:
-            // If I'm setting the osc ports make sure those are Numbers
+        case puara_keys::DEVICE_ID:
             ret = saveConfig(var.name, var.numberValue);
             if (ret) {
                 return -1;
@@ -990,11 +1050,17 @@ int Puara::get(settingsVariables *var) {
         case puara_keys::OSC_IP2:
             var->textValue = oscIP2;
             break;
+        case puara_keys::DEVICE_NAME:
+            var->textValue = device;
+            break;
         case puara_keys::OSC_PORT1:
             var->textValue = std::to_string(oscPORT1);
             break;
         case puara_keys::OSC_PORT2:
             var->textValue = std::to_string(oscPORT2);
+            break;
+        case puara_keys::DEVICE_ID:
+            var->textValue = std::to_string(id);
             break;
         default:
             var->textValue = "NULL";
@@ -1060,7 +1126,7 @@ bool Puara::IP2_ready() {
 }
 
 // Wifi handlers
-void Puara::wifi_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
+void Puara::wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 			       struct net_if *iface)
 {
 	switch (mgmt_event) {
