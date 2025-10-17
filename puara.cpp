@@ -84,14 +84,21 @@ void Puara::sta_connect() {
 }
 
 void Puara::ap_connect() {
-    int ret = 0;
-	ret = net_mgmt(NET_REQUEST_WIFI_AP_ENABLE, ap_iface, &wifi_config_ap,
-			   sizeof(struct wifi_connect_req_params));
-    
-    // Enable DHCPV4 Server
-    enable_dhcpv4_server();
+	if (!ap_iface) {
+		LOG_ERR("AP: is not initialized");
+	}
 
-    if (ret) {
+	LOG_INF("Turning on AP Mode");
+	if (strlen(APpasswd) == 0) {
+		wifi_config_ap.security = WIFI_SECURITY_TYPE_NONE;
+	} else {
+
+		wifi_config_ap.security = WIFI_SECURITY_TYPE_PSK;
+	}
+
+	int ret = net_mgmt(NET_REQUEST_WIFI_AP_ENABLE, ap_iface, &wifi_config_ap,
+			   sizeof(struct wifi_connect_req_params));
+	if (ret) {
 		LOG_ERR("NET_REQUEST_WIFI_AP_ENABLE failed, err: %d", ret);
 	}
 }
@@ -179,12 +186,13 @@ void Puara::start_wifi() {
     wifi_config_sta.mfp = WIFI_MFP_OPTIONAL;
 
     // Configure wifi ap settings
+    // Default to a 5GHz Soft access point on channel 149
     wifi_config_ap.ssid = (const uint8_t *)dmiName.c_str();
 	wifi_config_ap.ssid_length = dmiName.length();
 	wifi_config_ap.psk = (const uint8_t *)APpasswd;
 	wifi_config_ap.psk_length = strlen(APpasswd);
-	wifi_config_ap.channel = WIFI_CHANNEL_ANY;
-	wifi_config_ap.band = WIFI_FREQ_BAND_2_4_GHZ;
+	wifi_config_ap.channel = 149;
+	wifi_config_ap.band = WIFI_FREQ_BAND_5_GHZ;
     wifi_config_ap.bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ;
 
     //Initialize Wifi
