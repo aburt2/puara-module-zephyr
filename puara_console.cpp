@@ -40,14 +40,17 @@ static int parse_setting_args_set(const struct shell *sh, size_t argc, char *arg
                 {"name", required_argument, 0, 'n'},
                 {"id", required_argument, 0, 'd'},
 		{"ssid", required_argument, 0, 's'},
-		{"ssid_password", required_argument, 0, 'p'},
-		{"ap_password", required_argument, 0, 'a'},
-		{"OSC IP1", required_argument, 0, 'i'},
-		{"OSC IP2", required_argument, 0, 'o'},
-		{"OSC Port1", required_argument, 0, 'r'},
-		{"OSC Port2", required_argument, 0, 't'},
+		{"psk", required_argument, 0, 'p'},
+		{"apsk", required_argument, 0, 'a'},
+		{"oscip1", required_argument, 0, 'i'},
+		{"oscip2", required_argument, 0, 'o'},
+		{"port1", required_argument, 0, 'r'},
+		{"port2", required_argument, 0, 't'},
 		{0, 0, 0, 0}
     };
+
+    // Check that I've submitted an argument
+
 
     while ((opt = getopt_long(argc, argv, "n:d:s:p:a:i:o:r:t:", set_options, &opt_index)) != -1) {
         state = getopt_state_get();
@@ -89,7 +92,7 @@ static int parse_setting_args_set(const struct shell *sh, size_t argc, char *arg
                 var->numberValue = atoi(state->optarg);
                 break;
         default:
-                printk("Invalid option %c\n", state->optopt);
+                shell_error(sh, "Invalid option %c\n", state->optopt);
                 return -EINVAL;
         }
     }
@@ -104,19 +107,19 @@ static int parse_setting_args_get(const struct shell *sh, size_t argc, char *arg
 	int opt_index = 0;
     struct getopt_state *state;
     static const struct option get_options[] = {
-                {"name", required_argument, 0, 'n'},
-                {"id", required_argument, 0, 'd'},
+                {"name", no_argument, 0, 'n'},
+                {"id", no_argument, 0, 'd'},
 		{"ssid", no_argument, 0, 's'},
-		{"ssid_password", no_argument, 0, 'p'},
-		{"ap_password", no_argument, 0, 'a'},
-		{"OSC IP1", no_argument, 0, 'i'},
-		{"OSC IP2", no_argument, 0, 'o'},
-		{"OSC Port1", no_argument, 0, 'r'},
-		{"OSC Port2", no_argument, 0, 't'},
+		{"psk", no_argument, 0, 'p'},
+		{"apsk", no_argument, 0, 'a'},
+		{"oscip1", no_argument, 0, 'i'},
+		{"oscip2", no_argument, 0, 'o'},
+		{"port1", no_argument, 0, 'r'},
+		{"port2", no_argument, 0, 't'},
 		{0, 0, 0, 0}
     };
 
-    while ((opt = getopt_long(argc, argv, "spaiort", get_options, &opt_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "ndspaiort", get_options, &opt_index)) != -1) {
         state = getopt_state_get();
         switch (opt) {
         case 'n':
@@ -147,7 +150,7 @@ static int parse_setting_args_get(const struct shell *sh, size_t argc, char *arg
                 var->name = "oscPORT2";
                 break;
         default:
-                printk("Invalid option %c\n", state->optopt);
+                shell_error(sh, "Invalid option %c\n", state->optopt);
                 return -EINVAL;
         }
     }
@@ -161,16 +164,27 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv, uint32_t pe
     settingsVariables var;
     int ret = 0;
     if (parse_setting_args_set(sh, argc, argv, &var) != 0) {
+        shell_help(sh);
         return -EINVAL;
     }
+
+    // Check if there is a variable at all
+    if (var.name.empty()) {
+        // If the variable is empty it means nothing was provided
+        shell_error(sh, "No setting was specified");
+        shell_help(sh);
+        return -EINVAL;
+    }
+
     ret = puara_module.set(var);
 
-    if (ret) {
-        std::cout << "Error in saving variable: " << ret << std::endl;
+    if (ret != 0) {
+        shell_error(sh, "Error in saving variable: %s", var.name.c_str());
+        shell_help(sh);
         return -EINVAL;
     }
 
-    std::cout << "Successfully saved variable" << std::endl;
+    shell_info(sh, "Successfully saved variable");
     return 0;
 }
 
@@ -178,17 +192,27 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t pe
     settingsVariables var;
     int ret = 0;
     if (parse_setting_args_get(sh, argc, argv, &var) != 0) {
+        shell_help(sh);
         return -EINVAL;
     }
+    
+    // Check if there is a variable at all
+    if (var.name.empty()) {
+        // If the variable is empty it means nothing was provided
+        shell_error(sh, "No setting was specified");
+        shell_help(sh);
+        return -EINVAL;
+    }
+
     ret = puara_module.get(&var);
 
-    if (ret) {
-        std::cout << "Error in geting variable: " << ret << std::endl;
+    if (ret != 0) {
+        shell_error(sh, "Error in getting variable: %s", var.name.c_str());
         return -EINVAL;
     }
 
     // Print output of cmd to shell
-    printk("%s: %s\n", var.name.c_str(), var.textValue.c_str());
+    shell_info(sh, "%s: %s\n", var.name.c_str(), var.textValue.c_str());
     return 0;
 }
 
@@ -197,28 +221,28 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_puara_commands,
         SHELL_CMD(reboot, NULL, "Reboot device", cmd_reboot_device),
         SHELL_CMD(ping, NULL, "Ping command.", cmd_puara_ping),
         SHELL_CMD(whoareyou, NULL, "Returns device name.", cmd_whoareyou),
-        SHELL_CMD(set, NULL, "Set device setting\n"
+        SHELL_CMD_ARG(set, NULL, "Set device setting\n"
                                 "[-n --name]: Device Name\n"
                                 "[-d --id]: Device ID\n"
-                                "<-s --ssid \"<SSID>\">: SSID.\n"
+                                "[-s --ssid]: SSID.\n"
                                 "[-p, --psk]: SSID Password (valid only for secure SSIDs)\n"
                                 "[-a, --apsk]: AP Password\n"
                                 "[-i, --oscip1]: OSC IP address 1\n"
                                 "[-o, --oscip2]: OSC IP address 2\n"
                                 "[-r, --port1]: OSC port for IP address 1\n"
                                 "[-t, --port2]: OSC port for IP address 2\n",
-                                cmd_set),
-        SHELL_CMD(get, NULL, "Get device setting\n"
+                                cmd_set, 2, 10),
+        SHELL_CMD_ARG(get, NULL, "Get device setting\n"
                                 "[-n --name]: Device Name\n"
                                 "[-d --id]: Device ID\n"
-                                "<-s --ssid \"<SSID>\">: SSID.\n"
+                                "[-s --ssid]: SSID.\n"
                                 "[-p, --psk]: SSID Password (valid only for secure SSIDs)\n"
                                 "[-a, --apsk]: AP Password\n"
                                 "[-i, --oscip1]: OSC IP address 1\n"
                                 "[-o, --oscip2]: OSC IP address 2\n"
                                 "[-r, --port1]: OSC port for IP address 1\n"
                                 "[-t, --port2]: OSC port for IP address 2\n",
-                                cmd_get),
+                                cmd_get, 2, 10),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 

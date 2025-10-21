@@ -155,7 +155,7 @@ void Puara::start_wifi() {
 
     // Create dmiName from device name and ID
     std::stringstream tempBuf;
-    tempBuf << Puara::device << "_" << std::setfill('0') << std::setw(PUARA_MAX_ID_LENGTH) << Puara::id;
+    tempBuf << Puara::device << "_" << std::setfill('0') << std::setw(PUARA_MAX_ID_LENGTH) << id;
     Puara::dmiName = tempBuf.str();
 
     // Check if wifiSSID is empty and wifiPSK have less than 8 characteres
@@ -828,7 +828,7 @@ int Puara::puara_config_set(const char *name, size_t len, settings_read_cb read_
         return rc;
     }
     if (settings_name_steq(name, "DeviceID", &next) && !next) {
-        if (len > (sizeof(id) - 1)) {
+        if (len != sizeof(id)) {
             return -EINVAL;
         }
 
@@ -1015,7 +1015,7 @@ int Puara::set(settingsVariables var) {
         case puara_keys::OSC_IP2:
         case puara_keys::DEVICE_NAME:
             ret = saveConfig(var.name, var.textValue.c_str());
-            if (ret) {
+            if (ret != 0) {
                 return -1;
             }
             break;
@@ -1024,15 +1024,12 @@ int Puara::set(settingsVariables var) {
         case puara_keys::OSC_PORT2:
         case puara_keys::DEVICE_ID:
             ret = saveConfig(var.name, var.numberValue);
-            if (ret) {
+            if (ret != 0) {
                 return -1;
             }
             break;
         default:
-            ret = saveConfig(var.name, var.textValue.c_str());
-            if (ret) {
-                return -1;
-            }
+            return -1; 
             break;
     }
     return 0;
@@ -1072,6 +1069,7 @@ int Puara::get(settingsVariables *var) {
             break;
         default:
             var->textValue = "NULL";
+            return -1;
             break;
     }
     return 0;
