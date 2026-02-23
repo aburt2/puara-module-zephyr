@@ -35,7 +35,19 @@ char Puara::oscIP2[PUARA_MAX_CONFIG_LENGTH] = "0.0.0.0";
 char Puara::device[PUARA_MAX_CONFIG_LENGTH] = "Puara";
 int Puara::oscPORT1 = 8000;
 int Puara::oscPORT2 = 8000;
+bool Puara::enableLibmapper = false; 
 int Puara::id = 1;
+std::vector<puara_parent_settings> Puara::parent_variables = {};
+std::vector<puara_child_settings> Puara::variables = {};
+std::unordered_map<std::string,int> Puara::variables_fields = {};
+
+// Map between types and string
+std::unordered_map<PUARA_SETTINGS_TYPE, std::string> puara_types_map = {
+    {TEXT,"text"},
+    {NUMBER,"number"},
+    {PARENT,"parent"},
+};
+
 
 unsigned int Puara::get_version() {
     return version;
@@ -45,7 +57,7 @@ void Puara::set_version(unsigned int user_version) {
     version = user_version;
 };
 
-void Puara::start(Monitors monitor) {
+void Puara::start(Monitors monitor, std::vector<puara_parent_settings> sensor_setings) {
     std::cout 
     << "\n"
     << "**********************************************************\n"
@@ -56,10 +68,31 @@ void Puara::start(Monitors monitor) {
     << "* Firmware version: " << version << "                             *\n"
     << "**********************************************************\n"
     << std::endl;
+
+    // Get variables for the device
+    if (sensor_setings.size() > 0) {
+        for (auto parent_temp: sensor_setings) {
+            parent_variables.push_back(parent_temp);
+
+            // Get every child variable in the parent variable structure
+            if (parent_temp.nested_settings.size() > 0) {
+                for (auto temp: parent_temp.nested_settings) {
+                    if (variables_fields.find(temp.name) == variables_fields.end()) {
+                        variables_fields.insert({temp.name, variables.size()});
+                        variables.push_back(temp);
+                    } else {
+                        int variable_index = variables_fields.at(temp.name);
+                        variables.at(variable_index) = temp;
+                    }
+                }
+            }
+        }
+    }
       
     // Setup storage
     settings_subsys_init();
-    settings_register(&puara_config);
+    settings_register(&puara_config); // register settings
+    settings_register(&puara_variables); // register variables
     settings_load();
 
     start_wifi();
@@ -811,6 +844,28 @@ bool Puara::get_StaIsConnected() {
     return StaIsConnected;
 }
 
+int Puara::puara_variable_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
+    const char *next;
+    int rc;
+
+    for (auto& var : variables) {
+        if (settings_name_steq(name, var.name.c_str(), &next) && !next) {
+            if (len > var.size) {
+                printk("Length %d\n", len);
+                return -EINVAL;
+            }
+
+            rc = read_cb(cb_arg, var.value, var.size);
+            if (rc >= 0) {
+                return 0;
+            }
+
+            return rc;
+        }
+    }
+
+}
+
 int Puara::puara_config_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg) {
     const char *next;
     int rc;
@@ -933,7 +988,32 @@ int Puara::puara_config_set(const char *name, size_t len, settings_read_cb read_
 
         return rc;
     }
+
     return -ENOENT;
+}
+
+int Puara::saveVar(std::string varName, void* varValue, size_t var_len) {
+    // Save value
+    config_str = "sensor/";
+    config_str.append(varName);
+
+    // Update value in runtime
+    int storage_key = variables_fields.at(varName);
+    int err = settings_save_one(config_str.c_str(), varValue, var_len);
+
+    // If error print to log
+    if (err != 0) {
+        LOG_ERR("Failed to save variable <%s>.", varName.c_str());
+    }
+
+    // Update variable
+    if (var_len < variables[storage_key].size) {
+        memcpy(&variables[storage_key].value, varValue, var_len);
+    } else {
+        LOG_ERR("Failed to update variable <%s>.", varName.c_str());
+    }
+
+    return 0;
 }
 
 int Puara::saveConfig(std::string varName, int varValue) {
@@ -1064,6 +1144,13 @@ int Puara::get(settingsVariables *var) {
         case puara_keys::OSC_PORT2:
             var->textValue = std::to_string(oscPORT2);
             break;
+        case puara_keys::ENABLE_LIBMAPPER:
+            if (enableLibmapper) {
+                var->textValue = "ENABLED";
+            } else {
+                var->textValue = "DISABLED";
+            }
+            break;
         case puara_keys::DEVICE_ID:
             var->textValue = std::to_string(id);
             break;
@@ -1075,12 +1162,29 @@ int Puara::get(settingsVariables *var) {
     return 0;
 }
 
-double Puara::getVarNumber(std::string varName) {
-    return variables.at(variables_fields.at(varName)).numberValue;
+std::vector<puara_parent_settings> Puara::getSensorSettings() {
+    return parent_variables;
 }
-        
-std::string Puara::getVarText(std::string varName) {
-    return variables.at(variables_fields.at(varName)).textValue;
+
+int Puara::getVar(std::string varName, void* var, size_t len) {
+    // Check if key is valid
+    if (variables_fields.find(varName) == variables_fields.end()) {
+        LOG_ERR("Failed to retrieve variable <%s>. Variable not found in variable fields", varName.c_str());
+        return -1;
+    }
+    // Get child variable
+    puara_child_settings temp = variables.at(variables_fields.at(varName));
+
+    // Copy value to
+    if ((var != NULL) && (len < temp.size)) {
+        memcpy(var, temp.value, len);
+    } else {
+        LOG_ERR("Failed to retrieve variable <%s>. Variable size requested %d is larger than stored variable size %d", varName.c_str(), len, temp.size);
+        return -1;
+    }
+
+    // Return size of the variable
+    return len;
 }
 
 std::string Puara::getIP1() {

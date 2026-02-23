@@ -1,16 +1,24 @@
 {
     "settings": [
         {
-            "name": "Hitchhiker",
-            "value": "Ford"
+            "name": "enable_libmapper",
+            "value": 0
         },
         {
-            "name": "answer_to_everything",
-            "value": 42
+            "name": "fsr_offset",
+            "value": 2000
         },
         {
-            "name": "variable3",
-            "value": 12.345
+            "name": "touch_noise",
+            "value": 50
+        },
+        {
+            "name": "jab_threshold",
+            "value": 5
+        },
+        {
+            "name": "battery_size_mah",
+            "value": 2000
         }
     ]
 }

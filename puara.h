@@ -44,16 +44,46 @@
 #define STORAGE_PARTITION_ID	FIXED_PARTITION_ID(STORAGE_PARTITION)
 #define PUARA_MAX_CONFIG_LENGTH 32
 #define PUARA_MAX_ID_LENGTH 3
+#define PUARA_MAX_ARRAY_SIZE 32
+
+// Get header for parsing JSON objects (to parse settings)
+#include <zephyr/data/json.h>
+
 
 // Needed for power control
 #include <zephyr/sys/reboot.h>
 
-// Settings structure
+// Enum and map for setting types
+enum PUARA_SETTINGS_TYPE {
+    TEXT,
+    NUMBER,
+    ARRAY,
+    PARENT
+};
+
+// Settings structure for device settings
 struct settingsVariables {
     std::string name;
+    std::string description;
     std::string type;
     std::string textValue;
     double numberValue;
+};
+
+// Settings structuree for sensor settings
+#define PUARA_MAX_NESTED_SETTINGS 10
+struct puara_child_settings {
+    std::string name;
+    std::string description;
+    std::string type;
+    size_t size;
+    void *value;
+};
+
+struct puara_parent_settings {
+    std::string name;
+    std::string description;
+    std::vector<puara_child_settings> nested_settings;
 };
 
 // MACROS for ease of use
@@ -65,8 +95,9 @@ enum puara_keys {
     OSC_IP2 = 6,
     OSC_PORT2 = 7,
     PASSWORD = 8,
+    ENABLE_LIBMAPPER = 9,
     DEVICE_NAME = 12,
-    DEVICE_ID = 13,
+    DEVICE_ID = 13
 };
 
 // Wifi event handler
@@ -75,25 +106,28 @@ class Puara {
         unsigned int version;
         std::string dmiName = "Puara_0";
 
-        std::vector<settingsVariables> variables;
-        std::unordered_map<std::string,int> variables_fields;
+        static std::vector<puara_parent_settings> parent_variables;
+        static std::vector<puara_child_settings> variables;
+        static std::unordered_map<std::string,int> variables_fields;
 
         std::unordered_map<std::string,int> config_fields = {
             // Networking Settings
             {"SSID",1},
             {"APpasswd",2},
             {"APpasswdValidate",3},
+            // OSC/Libmapper settings
             {"oscIP1",4},
             {"oscPORT1",5},
             {"oscIP2",6},
             {"oscPORT2",7},
+            {"enableLibmapper",9},
+            // SoftAP Settings
             {"password",8},
-            {"reboot",9},
             {"persistentAP",10},
             {"localPORT",11},
             // Device settings
             {"DeviceName", 12},
-            {"DeviceID", 13},
+            {"DeviceID", 13}
         };
 
         std::string author;
@@ -107,6 +141,7 @@ class Puara {
         static int oscPORT1;
         static int oscPORT2;
         static int id;
+        static bool enableLibmapper;
         int localPORT;
         
         bool StaIsConnected;
@@ -143,12 +178,20 @@ class Puara {
         static void wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface);
         void enable_dhcpv4_server();
 
-        // Storage handlers
+        // Storage callback handlers
         static int puara_config_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg);
+        static int puara_variable_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg);
+
+        // Settings structure
         struct settings_handler puara_config = {
             .name = "config",
             .h_set = puara_config_set,
         };
+        struct settings_handler puara_variables = {
+            .name = "sensor",
+            .h_set = puara_variable_set,
+        };
+
 
         // Get JSON values
         void read_settings_json_internal(std::string& contents, bool merge=false);
@@ -174,7 +217,7 @@ class Puara {
             USB_MONITOR = 2
         };
 
-        void start(Monitors monitor = UART_MONITOR); 
+        void start(Monitors monitor = UART_MONITOR, std::vector<puara_parent_settings> sensor_setings = {}); 
         
         int start_webserver(void);
         void stop_webserver(void);
@@ -215,15 +258,14 @@ class Puara {
 
         // Storage methods
         // Saving values
-        int saveVar(std::string varName, double varValue);
-        int saveVar(std::string varName, std::string varValue);
+        int saveVar(std::string varName, void* varValue, size_t var_len);
         int saveConfig(std::string varName, int varValue);
         int saveConfig(std::string varName, const char *varValue);
         
         // Retrieving values
-        double getVarNumber (std::string varName);
-        std::string getVarText(std::string varName);
-        double getConfigNumber (std::string varName);
+        std::vector<puara_parent_settings> getSensorSettings();
+        int getVar(std::string varName, void* var, size_t len);
+        double getConfigNumber(std::string varName);
         std::string getConfigText(std::string varName);
 
         // Retrieving and sending config/settings data
