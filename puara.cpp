@@ -40,14 +40,135 @@ int Puara::id = 1;
 std::vector<puara_parent_settings> Puara::parent_variables = {};
 std::vector<puara_child_settings> Puara::variables = {};
 std::unordered_map<std::string,int> Puara::variables_fields = {};
+int Puara::http_service_port = 80;
 
-// Map between types and string
-std::unordered_map<PUARA_SETTINGS_TYPE, std::string> puara_types_map = {
-    {TEXT,"text"},
-    {NUMBER,"number"},
-    {PARENT,"parent"},
+// Webserver resources
+uint8_t Puara::index_html_gz[] = {
+#include "index.html.gz.inc"
+};
+uint8_t Puara::factory_html_gz[] = {
+#include "factory.html.gz.inc"
+};
+uint8_t Puara::reboot_html_gz[] = {
+#include "reboot.html.gz.inc"
+};
+uint8_t Puara::saved_html_gz[] = {
+#include "saved.html.gz.inc"
+};
+uint8_t Puara::scan_html_gz[] = {
+#include "scan.html.gz.inc"
+};
+uint8_t Puara::settings_html_gz[] = {
+#include "settings.html.gz.inc"
+};
+uint8_t Puara::update_html_gz[] = {
+#include "update.html.gz.inc"
+};
+uint8_t Puara::style_css_gz[] = {
+#include "style.css.gz.inc"
+};
+// Static HTTP resources
+http_resource_detail_static Puara::index_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = index_html_gz,
+	.static_data_len = sizeof(index_html_gz),
+};
+http_resource_detail_static Puara::reboot_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = reboot_html_gz,
+	.static_data_len = sizeof(reboot_html_gz),
+};
+http_resource_detail_static Puara::factory_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = factory_html_gz,
+	.static_data_len = sizeof(factory_html_gz),
+};
+http_resource_detail_static Puara::saved_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = saved_html_gz,
+	.static_data_len = sizeof(saved_html_gz),
+};
+http_resource_detail_static Puara::scan_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = scan_html_gz,
+	.static_data_len = sizeof(scan_html_gz),
+};
+http_resource_detail_static Puara::settings_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_POST),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = settings_html_gz,
+	.static_data_len = sizeof(settings_html_gz),
+};
+http_resource_detail_static Puara::update_html_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/html",
+		},
+	.static_data = update_html_gz,
+	.static_data_len = sizeof(update_html_gz),
+};
+http_resource_detail_static Puara::style_css_gz_resource_detail = {
+	.common = {
+            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
+			.type = HTTP_RESOURCE_TYPE_STATIC,
+			.content_encoding = "gzip",
+			.content_type = "text/css",
+		},
+	.static_data = style_css_gz,
+	.static_data_len = sizeof(style_css_gz),
 };
 
+// Define HTTP Services
+HTTP_SERVICE_DEFINE(puara_service, NULL, &Puara::http_service_port,
+		    CONFIG_HTTP_SERVER_MAX_CLIENTS, 10, NULL, NULL, NULL);
+
+HTTP_RESOURCE_DEFINE(index_html_gz_resource, puara_service, "/",
+		     &Puara::index_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(factory_html_gz_resource, puara_service, "/factory",
+		     &Puara::factory_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(reboot_html_gz_resource, puara_service, "/reboot",
+		     &Puara::reboot_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(saved_html_gz_resource, puara_service, "/saved",
+		     &Puara::saved_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(scan_html_gz_resource, puara_service, "/scan",
+		     &Puara::scan_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(settings_html_gz_resource, puara_service, "/settings",
+		     &Puara::settings_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(update_html_gz_resource, puara_service, "/update",
+		     &Puara::update_html_gz_resource_detail);
+HTTP_RESOURCE_DEFINE(style_css_gz_resource, puara_service, "/style.css",
+		     &Puara::style_css_gz_resource_detail);
 
 unsigned int Puara::get_version() {
     return version;
@@ -57,7 +178,7 @@ void Puara::set_version(unsigned int user_version) {
     version = user_version;
 };
 
-void Puara::start(Monitors monitor, std::vector<puara_parent_settings> sensor_setings) {
+void Puara::start(std::vector<puara_parent_settings> sensor_setings, Monitors monitor) {
     std::cout 
     << "\n"
     << "**********************************************************\n"
@@ -103,7 +224,7 @@ void Puara::start(Monitors monitor, std::vector<puara_parent_settings> sensor_se
     module_monitor = monitor;
 
     // some delay added as start listening blocks the hw monitor
-    std::cout << "Puara Start Done!\n\n  Type \"reboot\" in the serial monitor to reset the ESP32.\n\n";
+    std::cout << "Puara Start Done!\n\n  Type \"puara reboot\" in the serial monitor to reset the controller.\n\n";
 }
 
 void Puara::sta_connect() {
@@ -235,375 +356,9 @@ void Puara::start_wifi() {
     ApStarted = false;
 }
 
-void Puara::read_config_json() { // Deserialize
-    
-    // std::cout << "json: Mounting FS" << std::endl;
-    // Puara::mount_spiffs();
-
-    // std::cout << "json: Opening config json file" << std::endl;
-    // FILE* f = fopen("/spiffs/config.json", "r");
-    // if (f == NULL) {
-    //     std::cout << "json: Failed to open file" << std::endl;
-    //     return;
-    // }
-
-    // std::cout << "json: Reading json file" << std::endl;
-    // std::ifstream in("/spiffs/config.json");
-    // std::string contents((std::istreambuf_iterator<char>(in)), 
-    // std::istreambuf_iterator<char>());
-
-    // Puara::read_config_json_internal(contents);
-
-    // fclose(f);
-    // Puara::unmount_spiffs();
-}
-
-void Puara::read_config_json_internal(std::string& contents) {
-    // std::cout << "json: Getting data" << std::endl;
-    // cJSON *root = cJSON_Parse(contents.c_str());
-    // if (cJSON_GetObjectItem(root, "device")) {
-    //     Puara::device = cJSON_GetObjectItem(root,"device")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "id")) {
-    //     Puara::id = cJSON_GetObjectItem(root,"id")->valueint;
-    // }
-    // if (cJSON_GetObjectItem(root, "author")) {
-    //     Puara::author = cJSON_GetObjectItem(root,"author")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "institution")) {
-    //     Puara::institution = cJSON_GetObjectItem(root,"institution")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "APpasswd")) {
-    //     Puara::APpasswd = cJSON_GetObjectItem(root,"APpasswd")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "wifiSSID")) {
-    //     Puara::wifiSSID = cJSON_GetObjectItem(root,"wifiSSID")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "wifiPSK")) {
-    //     Puara::wifiPSK = cJSON_GetObjectItem(root,"wifiPSK")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "persistentAP")) {
-    //     Puara::persistentAP = cJSON_GetObjectItem(root,"persistentAP")->valueint;
-    // }
-    // if (cJSON_GetObjectItem(root, "oscIP1")) {
-    //     Puara::oscIP1 = cJSON_GetObjectItem(root,"oscIP1")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "oscPORT1")) {
-    //     Puara::oscPORT1 = cJSON_GetObjectItem(root,"oscPORT1")->valueint;
-    // }
-    // if (cJSON_GetObjectItem(root, "oscIP2")) {
-    //     Puara::oscIP2 = cJSON_GetObjectItem(root,"oscIP2")->valuestring;
-    // }
-    // if (cJSON_GetObjectItem(root, "oscPORT2")) {
-    //     Puara::oscPORT2 = cJSON_GetObjectItem(root,"oscPORT2")->valueint;
-    // }
-    // if (cJSON_GetObjectItem(root, "localPORT")) {
-    //     Puara::localPORT = cJSON_GetObjectItem(root,"localPORT")->valueint;
-    // }
-    
-    // std::cout << "\njson: Data collected:\n\n"
-    // << "device: " << device << "\n"
-    // << "id: " << id << "\n"
-    // << "author: " << author << "\n"
-    // << "institution: " << institution << "\n"
-    // << "APpasswd: " << APpasswd << "\n"
-    // << "wifiSSID: " << wifiSSID << "\n"
-    // << "wifiPSK: " << wifiPSK << "\n"
-    // << "persistentAP: " << persistentAP << "\n"
-    // << "oscIP1: " << oscIP1 << "\n"
-    // << "oscPORT1: " << oscPORT1 << "\n"
-    // << "oscIP2: " << oscIP2 << "\n"
-    // << "oscPORT2: " << oscPORT2 << "\n"
-    // << "localPORT: " << localPORT << "\n"
-    // << std::endl;
-    
-    // cJSON_Delete(root);
-
-    // std::stringstream tempBuf;
-    // tempBuf << Puara::device << "_" << std::setfill('0') << std::setw(3) << Puara::id;
-    // Puara::dmiName = tempBuf.str();
-    // printf("Device unique name defined: %s\n",dmiName.c_str());
-}
-
-void Puara::read_settings_json() {
-
-    // std::cout << "json: Mounting FS" << std::endl;
-    // Puara::mount_spiffs();
-
-    // std::cout << "json: Opening settings json file" << std::endl;
-    // FILE* f = fopen("/spiffs/settings.json", "r");
-    // if (f == NULL) {
-    //     std::cout << "json: Failed to open file" << std::endl;
-    //     return;
-    // }
-
-    // std::cout << "json: Reading json file" << std::endl;
-    // std::ifstream in("/spiffs/settings.json");
-    // std::string contents((std::istreambuf_iterator<char>(in)), 
-    // std::istreambuf_iterator<char>());
-
-    // Puara::read_settings_json_internal(contents);
-    // fclose(f);
-    // Puara::unmount_spiffs();
-}
-
-void Puara::read_settings_json_internal(std::string& contents, bool merge) {
-    // std::cout << "json: Getting data" << std::endl;
-    // cJSON *root = cJSON_Parse(contents.c_str());
-    // cJSON *setting = NULL;
-    // cJSON *settings = NULL;
-
-    // std::cout << "json: Parse settings information" << std::endl;
-    // settings = cJSON_GetObjectItemCaseSensitive(root, "settings");
-   
-    // settingsVariables temp;
-    // if (!merge) {
-    //     variables.clear();
-    // }
-    // std::cout << "json: Extract info" << std::endl;
-    // cJSON_ArrayForEach(setting, settings) {
-    //     cJSON *name = cJSON_GetObjectItemCaseSensitive(setting, "name");
-    //     cJSON *value = cJSON_GetObjectItemCaseSensitive(setting, "value");
-    //     temp.name = name->valuestring;
-    //     if (!cJSON_IsNumber(value)) {
-    //         temp.textValue = value->valuestring;
-    //         temp.type = "text";
-    //         temp.numberValue = 0;
-    //     } else {
-    //         temp.textValue.empty();
-    //         temp.numberValue = value->valuedouble;
-    //         temp.type = "number";
-    //     }
-    //     if (variables_fields.find(temp.name) == variables_fields.end()) {
-    //         variables_fields.insert({temp.name, variables.size()});
-    //         variables.push_back(temp);
-    //     } else {
-    //         int variable_index = variables_fields.at(temp.name);
-    //         variables.at(variable_index) = temp;
-    //     }
-    // }
-
-    // // Print acquired data
-    // std::cout << "\nModule-specific settings:\n\n";
-    // for (auto it : variables) {
-    //     std::cout << it.name << ": ";
-    //     if (it.type == "text") {
-    //         std::cout << it.textValue << "\n";
-    //     } else if (it.type == "number") {
-    //         std::cout << it.numberValue << "\n";
-    //     }
-    // }
-    // std::cout << std::endl;
-    
-    // cJSON_Delete(root);
-}
-
-
-void Puara::write_config_json() {    
-    // std::cout << "SPIFFS: Mounting FS" << std::endl;
-    // Puara::mount_spiffs();
-
-    // std::cout << "SPIFFS: Opening config.json file" << std::endl;
-    // FILE* f = fopen("/spiffs/config.json", "w");
-    // if (f == NULL) {
-    //     std::cout << "SPIFFS: Failed to open config.json file" << std::endl;
-    //     return;
-    // }
-
-    // cJSON *device_json = NULL;
-    // cJSON *id_json = NULL;
-    // cJSON *author_json = NULL;
-    // cJSON *institution_json = NULL;
-    // cJSON *APpasswd_json = NULL;
-    // cJSON *wifiSSID_json = NULL;
-    // cJSON *wifiPSK_json = NULL;
-    // cJSON *persistentAP_json = NULL;
-    // cJSON *oscIP1_json = NULL;
-    // cJSON *oscPORT1_json = NULL;
-    // cJSON *oscIP2_json = NULL;
-    // cJSON *oscPORT2_json = NULL;
-    // cJSON *localPORT_json = NULL;
-
-    // cJSON *root = cJSON_CreateObject();
-
-    // device_json = cJSON_CreateString(device.c_str());
-    // cJSON_AddItemToObject(root, "device", device_json);
-    
-    // id_json = cJSON_CreateNumber(id);
-    // cJSON_AddItemToObject(root, "id", id_json);
-    
-    // author_json = cJSON_CreateString(author.c_str());
-    // cJSON_AddItemToObject(root, "author", author_json);
-    
-    // institution_json = cJSON_CreateString(institution.c_str());
-    // cJSON_AddItemToObject(root, "institution", institution_json);
-    
-    // APpasswd_json = cJSON_CreateString(APpasswd.c_str());
-    // cJSON_AddItemToObject(root, "APpasswd", APpasswd_json);
-    
-    // wifiSSID_json = cJSON_CreateString(wifiSSID.c_str());
-    // cJSON_AddItemToObject(root, "wifiSSID", wifiSSID_json);
-    
-    // wifiPSK_json = cJSON_CreateString(wifiPSK.c_str());
-    // cJSON_AddItemToObject(root, "wifiPSK", wifiPSK_json);
-
-    // persistentAP_json = cJSON_CreateNumber(persistentAP);
-    // cJSON_AddItemToObject(root, "persistentAP", persistentAP_json);
-    
-    // oscIP1_json = cJSON_CreateString(oscIP1.c_str());
-    // cJSON_AddItemToObject(root, "oscIP1", oscIP1_json);
-    
-    // oscPORT1_json = cJSON_CreateNumber(oscPORT1);
-    // cJSON_AddItemToObject(root, "oscPORT1", oscPORT1_json);
-    
-    // oscIP2_json = cJSON_CreateString(oscIP2.c_str());
-    // cJSON_AddItemToObject(root, "oscIP2", oscIP2_json);
-    
-    // oscPORT2_json = cJSON_CreateNumber(oscPORT2);
-    // cJSON_AddItemToObject(root, "oscPORT2", oscPORT2_json);
-    
-    // localPORT_json = cJSON_CreateNumber(localPORT);
-    // cJSON_AddItemToObject(root, "localPORT", localPORT_json);
-
-    // std::cout << "\njson: Data stored:\n"
-    // << "\ndevice: " << device << "\n"
-    // << "id: " << id << "\n"
-    // << "author: " << author << "\n"
-    // << "institution: " << institution << "\n"
-    // << "APpasswd: " << APpasswd << "\n"
-    // << "wifiSSID: " << wifiSSID << "\n"
-    // << "wifiPSK: " << wifiPSK << "\n"
-    // << "persistentAP: " << persistentAP << "\n"
-    // << "oscIP1: " << oscIP1 << "\n"
-    // << "oscPORT1: " << oscPORT1 << "\n"
-    // << "oscIP2: " << oscIP2 << "\n"
-    // << "oscPORT2: " << oscPORT2 << "\n"
-    // << "localPORT: " << localPORT << "\n"
-    // << std::endl;
-
-    // // Save to config.json
-    // std::cout << "write_config_json: Serializing json" << std::endl;
-    // std::string contents = cJSON_Print(root);
-    // std::cout << "SPIFFS: Saving file" << std::endl;
-    // fprintf(f, "%s", contents.c_str());
-    // std::cout << "SPIFFS: closing" << std::endl;
-    // fclose(f);
-
-    // std::cout << "write_config_json: Delete json entity" << std::endl;
-    // cJSON_Delete(root);
-
-    // std::cout << "SPIFFS: umounting FS" << std::endl;
-    // Puara::unmount_spiffs();
-}
-
-void Puara::write_settings_json() {    
-    // std::cout << "SPIFFS: Mounting FS" << std::endl;
-    // Puara::mount_spiffs();
-
-    // std::cout << "SPIFFS: Opening settings.json file" << std::endl;
-    // FILE* f = fopen("/spiffs/settings.json", "w");
-    // if (f == NULL) {
-    //     std::cout << "SPIFFS: Failed to open settings.json file" << std::endl;
-    //     return;
-    // }
-
-    // cJSON *root = cJSON_CreateObject();
-    // cJSON *settings = cJSON_CreateArray();
-    // cJSON *setting = NULL;
-    // cJSON *data = NULL;
-    // cJSON_AddItemToObject(root, "settings", settings);
-
-    // for (auto it : variables) {
-    //     setting = cJSON_CreateObject();
-    //     cJSON_AddItemToArray(settings, setting);
-    //     data = cJSON_CreateString(it.name.c_str());
-    //     cJSON_AddItemToObject(setting, "name", data);
-    //     if (it.type == "text") {
-    //         data = cJSON_CreateString(it.textValue.c_str());
-    //     } else if (it.type == "number") {
-    //         data = cJSON_CreateNumber(it.numberValue);
-    //     }
-    //     cJSON_AddItemToObject(setting, "value", data);
-    // }
-
-    // // Save to settings.json
-    // std::cout << "write_settings_json: Serializing json" << std::endl;
-    // std::string contents = cJSON_Print(root);
-    // std::cout << "SPIFFS: Saving file" << std::endl;
-    // fprintf(f, "%s", contents.c_str());
-    // std::cout << "SPIFFS: closing" << std::endl;
-    // fclose(f);
-
-    // std::cout << "write_settings_json: Delete json entity" << std::endl;
-    // cJSON_Delete(root);
-
-    // std::cout << "SPIFFS: umounting FS" << std::endl;
-    // Puara::unmount_spiffs();
-}
-
 std::string Puara::get_dmi_name() {
     return dmiName;
 }
-
-// std::string Puara::prepare_index() {
-//     Puara::mount_spiffs();
-//     std::cout << "http (spiffs): Reading index file" << std::endl;
-//     std::ifstream in("/spiffs/index.html");
-//     std::string contents((std::istreambuf_iterator<char>(in)), 
-//     std::istreambuf_iterator<char>());
-//     // Put the module info on the HTML before send response
-//     Puara::find_and_replace("%DMINAME%", Puara::dmiName, contents);
-//     if (Puara::StaIsConnected) {
-//         Puara::find_and_replace("%STATUS%", "Currently connected on "
-//                                              "<strong style=\"color:Tomato;\">" + 
-//                                              Puara::wifiSSID + "</strong> network", 
-//                                              contents);
-//     } else {
-//         Puara::find_and_replace("%STATUS%", "Currently not connected to any network", 
-//                                  contents);
-//     }
-//     Puara::find_and_replace("%CURRENTSSID%", Puara::currentSSID, contents);
-//     Puara::find_and_replace("%CURRENTPSK%", Puara::wifiPSK, contents);
-//     Puara::checkmark("%CURRENTPERSISTENT%", Puara::persistentAP, contents);
-//     Puara::find_and_replace("%DEVICENAME%", Puara::device, contents);
-//     Puara::find_and_replace("%CURRENTOSC1%", Puara::oscIP1, contents);
-//     Puara::find_and_replace("%CURRENTPORT1%", Puara::oscPORT1, contents);
-//     Puara::find_and_replace("%CURRENTOSC2%", Puara::oscIP2, contents);
-//     Puara::find_and_replace("%CURRENTPORT2%", Puara::oscPORT2, contents);
-//     Puara::find_and_replace("%CURRENTLOCALPORT%", Puara::localPORT, contents);
-//     Puara::find_and_replace("%CURRENTSSID2%", Puara::wifiSSID, contents);
-//     Puara::find_and_replace("%CURRENTIP%", Puara::currentSTA_IP, contents);
-//     Puara::find_and_replace("%CURRENTAPIP%", Puara::currentAP_IP, contents);
-//     Puara::find_and_replace("%CURRENTSTAMAC%", Puara::currentSTA_MAC, contents);
-//     Puara::find_and_replace("%CURRENTAPMAC%", Puara::currentAP_MAC, contents);
-//     std::ostringstream tempBuf;
-//     tempBuf << std::setfill('0') << std::setw(3) << std::hex << Puara::id;
-//     Puara::find_and_replace("%MODULEID%", tempBuf.str(), contents);
-//     Puara::find_and_replace("%MODULEAUTH%", Puara::author, contents);
-//     Puara::find_and_replace("%MODULEINST%", Puara::institution, contents);
-//     Puara::find_and_replace("%MODULEVER%", Puara::version, contents);
-
-//     Puara::unmount_spiffs();
-
-//     return contents;
-// }
-
-
-// esp_err_t Puara::update_get_handler(httpd_req_t *req) {
-
-//     const char* resp_str = (const char*) req->user_ctx;
-//     Puara::mount_spiffs();
-//     std::cout << "http (spiffs): Reading update.html file" << std::endl;
-//     std::ifstream in(resp_str);
-//     std::string contents((std::istreambuf_iterator<char>(in)), 
-//     std::istreambuf_iterator<char>());
-//     //httpd_resp_set_type(req, "text/html");
-//     httpd_resp_sendstr(req, contents.c_str());
-    
-//     Puara::unmount_spiffs();
-
-//     return ESP_OK;
-// }
 
 void Puara::find_and_replace(std::string old_text, std::string new_text, std::string & str) {
 
@@ -659,91 +414,10 @@ int Puara::start_webserver(void) {
     //     std::cout << "start_webserver: Cannot start webserver: AP and STA not initializated" << std::endl;
     //     return NULL;
     // }
-    // Puara::webserver = NULL;
+    
+    // Start webserver
+    http_server_start();
 
-    // Puara::webserver_config.task_priority      = tskIDLE_PRIORITY+5;
-    // Puara::webserver_config.stack_size         = 4096;
-    // Puara::webserver_config.core_id            = tskNO_AFFINITY;
-    // Puara::webserver_config.server_port        = 80;
-    // Puara::webserver_config.ctrl_port          = 32768;
-    // Puara::webserver_config.max_open_sockets   = 7;
-    // Puara::webserver_config.max_uri_handlers   = 9;
-    // Puara::webserver_config.max_resp_headers   = 9;
-    // Puara::webserver_config.backlog_conn       = 5;
-    // Puara::webserver_config.lru_purge_enable   = true;
-    // Puara::webserver_config.recv_wait_timeout  = 5;
-    // Puara::webserver_config.send_wait_timeout  = 5;
-    // Puara::webserver_config.global_user_ctx = NULL;
-    // Puara::webserver_config.global_user_ctx_free_fn = NULL;
-    // Puara::webserver_config.global_transport_ctx = NULL;
-    // Puara::webserver_config.global_transport_ctx_free_fn = NULL;
-    // Puara::webserver_config.open_fn = NULL;
-    // Puara::webserver_config.close_fn = NULL;
-    // Puara::webserver_config.uri_match_fn = NULL;
-
-    // Puara::index.uri = "/";
-    // Puara::index.method    = HTTP_GET,
-    // Puara::index.handler   = index_get_handler,
-    // Puara::index.user_ctx  = (char*)"/spiffs/index.html";
-
-    // Puara::indexpost.uri = "/";
-    // Puara::indexpost.method    = HTTP_POST,
-    // Puara::indexpost.handler   = index_post_handler,
-    // Puara::indexpost.user_ctx  = (char*)"/spiffs/index.html";
-
-    // Puara::style.uri = "/style.css";
-    // Puara::style.method    = HTTP_GET,
-    // Puara::style.handler   = style_get_handler,
-    // Puara::style.user_ctx  = (char*)"/spiffs/style.css";
-
-    // // Puara::factory.uri = "/factory.html";
-    // // Puara::factory.method    = HTTP_GET,
-    // // Puara::factory.handler   = get_handler,
-    // // Puara::factory.user_ctx  = (char*)"/spiffs/factory.html";
-
-    // Puara::reboot.uri = "/reboot.html";
-    // Puara::reboot.method    = HTTP_GET,
-    // Puara::reboot.handler   = get_handler,
-    // Puara::reboot.user_ctx  = (char*)"/spiffs/reboot.html";
-
-    // Puara::scan.uri = "/scan.html";
-    // Puara::scan.method    = HTTP_GET,
-    // Puara::scan.handler   = scan_get_handler,
-    // Puara::scan.user_ctx  = (char*)"/spiffs/scan.html";
-
-    // // Puara::update.uri = "/update.html";
-    // // Puara::update.method    = HTTP_GET,
-    // // Puara::update.handler   = get_handler,
-    // // Puara::update.user_ctx  = (char*)"/spiffs/update.html";
-
-    // Puara::settings.uri = "/settings.html";
-    // Puara::settings.method    = HTTP_GET,
-    // Puara::settings.handler   = settings_get_handler,
-    // Puara::settings.user_ctx  = (char*)"/spiffs/settings.html";
-
-    // Puara::settingspost.uri = "/settings.html";
-    // Puara::settingspost.method    = HTTP_POST,
-    // Puara::settingspost.handler   = settings_post_handler,
-    // Puara::settingspost.user_ctx  = (char*)"/spiffs/settings.html";
-
-    // // Start the httpd server
-    // std::cout << "webserver: Starting server on port: " << webserver_config.server_port << std::endl;
-    // if (httpd_start(&webserver, &webserver_config) == ESP_OK) {
-    //     // Set URI handlers
-    //     std::cout << "webserver: Registering URI handlers" << std::endl;
-    //     httpd_register_uri_handler(webserver, &index);
-    //     httpd_register_uri_handler(webserver, &indexpost);
-    //     httpd_register_uri_handler(webserver, &style);
-    //     httpd_register_uri_handler(webserver, &scan);
-    //     //httpd_register_uri_handler(webserver, &factory);
-    //     httpd_register_uri_handler(webserver, &reboot);
-    //     // httpd_register_uri_handler(webserver, &update);
-    //     httpd_register_uri_handler(webserver, &settings);
-    //     httpd_register_uri_handler(webserver, &settingspost);
-    //     return webserver;
-    // }
-
-    // std::cout << "webserver: Error starting server!" << std::endl;
     return 0;
 }
 
@@ -751,7 +425,6 @@ void Puara::stop_webserver(void) {
     // Stop the httpd server
     // httpd_stop(webserver);
 }
-
 std::string Puara::convertToString(char* a) {
     std::string s(a);
     return s;
@@ -1176,7 +849,7 @@ int Puara::getVar(std::string varName, void* var, size_t len) {
     puara_child_settings temp = variables.at(variables_fields.at(varName));
 
     // Copy value to
-    if ((var != NULL) && (len < temp.size)) {
+    if ((var != NULL) && (len <= temp.size)) {
         memcpy(var, temp.value, len);
     } else {
         LOG_ERR("Failed to retrieve variable <%s>. Variable size requested %d is larger than stored variable size %d", varName.c_str(), len, temp.size);

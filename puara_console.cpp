@@ -13,7 +13,7 @@ static int cmd_whoareyou(const struct shell *sh, size_t argc, char **argv, uint3
 static int cmd_set(const struct shell *sh, size_t argc, char **argv, uint32_t period);
 static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t period);
 static int parse_setting_args_set(const struct shell *sh, size_t argc, char *argv[], settingsVariables *var);
-static int parse_setting_args_get(const struct shell *sh, size_t argc, char *argv[], settingsVariables *var);
+static int parse_setting_args_get(const struct shell *sh, size_t argc, char *argv[], std::vector<std::string> *var_names);
 
 // Define shell commands
 static int cmd_reboot_device(const struct shell *sh, size_t argc, char **argv, uint32_t period) {
@@ -208,8 +208,12 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t pe
                         char temp[PUARA_MAX_CONFIG_LENGTH];
                         puara_module.getVar(setting.name, &temp, setting.size);
                         shell_info(sh, "%s: %s", setting.name.c_str(), temp);
-                    } else if (setting.type == "number") {
-                        float temp;
+                    } else if (setting.type == "int") {
+                        int temp = 0;
+                        puara_module.getVar(setting.name, &temp, setting.size);
+                        shell_info(sh, "%s: %d", setting.name.c_str(), temp);
+                    } else if (setting.type == "float") {
+                        float temp = 0;
                         puara_module.getVar(setting.name, &temp, setting.size);
                         shell_info(sh, "%s: %.2f", setting.name.c_str(), temp);
                     } else if (setting.type == "array") {
@@ -221,9 +225,13 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t pe
                         std::string array_str = "[";
                         
                         // Add numbers to string
-                        for (size_t i; i < array_size; i++) {
-                            array_str.append(std::to_string(temp[i]));
-                            array_str.append(",");
+                        for (size_t i = 0; i < array_size; i++) {
+                            std::stringstream stream;
+                            stream << std::fixed << std::setprecision(2) << temp[i];
+                            array_str.append(stream.str());
+                            if (i+1 < array_size) {
+                                array_str.append(",");
+                            }
                         }
                         
                         // Add closing bracked to 
@@ -244,7 +252,7 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t pe
             }
 
             // Print output of cmd to shell
-            shell_info(sh, "%s: %s\n", var.name.c_str(), var.textValue.c_str());
+            shell_info(sh, "%s: %s", var.name.c_str(), var.textValue.c_str());
 
             // Reset variable
             var.name = "";

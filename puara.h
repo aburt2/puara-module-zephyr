@@ -33,6 +33,12 @@
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/dhcpv4_server.h>
 
+// Needed for HTTP server
+#include <zephyr/net/http/server.h>
+#include <zephyr/net/http/service.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/socket.h>
+
 // Needed for settings
 #include <zephyr/settings/settings.h>
 #if defined(CONFIG_SETTINGS_FILE)
@@ -192,12 +198,6 @@ class Puara {
             .h_set = puara_variable_set,
         };
 
-
-        // Get JSON values
-        void read_settings_json_internal(std::string& contents, bool merge=false);
-        void read_config_json_internal(std::string& contents);
-        void merge_settings_json(std::string& new_contents);
-
         // Webserver helpers
         std::string prepare_index();
         void find_and_replace(std::string old_text, std::string new_text, std::string &str);
@@ -217,11 +217,35 @@ class Puara {
             USB_MONITOR = 2
         };
 
-        void start(Monitors monitor = UART_MONITOR, std::vector<puara_parent_settings> sensor_setings = {}); 
+        // Webserver properties
+        static int http_service_port;
+        // HTML resources
+        static uint8_t index_html_gz[];
+        static uint8_t factory_html_gz[]; 
+        static uint8_t reboot_html_gz[];
+        static uint8_t saved_html_gz[];
+        static uint8_t scan_html_gz[];
+        static uint8_t settings_html_gz[];
+        static uint8_t update_html_gz[];
+        static uint8_t style_css_gz[];
+        // HTTP Resources
+        static http_resource_detail_static index_html_gz_resource_detail;
+        static http_resource_detail_static factory_html_gz_resource_detail;
+        static http_resource_detail_static reboot_html_gz_resource_detail;
+        static http_resource_detail_static saved_html_gz_resource_detail;
+        static http_resource_detail_static scan_html_gz_resource_detail;
+        static http_resource_detail_static settings_html_gz_resource_detail;
+        static http_resource_detail_static update_html_gz_resource_detail;
+        static http_resource_detail_static style_css_gz_resource_detail;
+
+        // Start method
+        void start(std::vector<puara_parent_settings> sensor_setings = {}, Monitors monitor = UART_MONITOR); 
         
+        // Webserver methods
         int start_webserver(void);
         void stop_webserver(void);
-        void start_wifi();
+
+        // Get property methods
         std::string get_dmi_name();
         unsigned int get_version();
         void set_version(unsigned int user_version);
@@ -233,17 +257,12 @@ class Puara {
         std::string getPORT2Str();
         int unsigned getLocalPORT();
         std::string getLocalPORTStr();
-        void mount_spiffs();
-        void unmount_spiffs();
         const std::string data_start = "<<<";
         const std::string data_end = ">>>";
-        void read_config_json();
-        void write_config_json();
-        void read_settings_json();
-        void write_settings_json();
         void send_serial_data(std::string data);
 
         // Wifi methods
+        void start_wifi();
         void start_mdns_service(const char * device_name, const char * instance_name);
         void start_mdns_service(std::string device_name, std::string instance_name);
         void wifi_scan();
@@ -265,9 +284,7 @@ class Puara {
         // Retrieving values
         std::vector<puara_parent_settings> getSensorSettings();
         int getVar(std::string varName, void* var, size_t len);
-        double getConfigNumber(std::string varName);
-        std::string getConfigText(std::string varName);
-
+        
         // Retrieving and sending config/settings data
         int set(settingsVariables var);
         int get(settingsVariables *var);
