@@ -35,26 +35,26 @@ static int parse_setting_args_set(const struct shell *sh, size_t argc, char *arg
     // Options setup
 	int opt;
 	int opt_index = 0;
-    struct getopt_state *state;
-    static const struct option set_options[] = {
-        {"name", required_argument, 0, 'n'},
-        {"id", required_argument, 0, 'd'},
-		{"ssid", required_argument, 0, 's'},
-		{"psk", required_argument, 0, 'p'},
-		{"apsk", required_argument, 0, 'a'},
-		{"oscip1", required_argument, 0, 'i'},
-		{"oscip2", required_argument, 0, 'o'},
-		{"port1", required_argument, 0, 'r'},
-		{"port2", required_argument, 0, 't'},
-        {"enableLibmapper", required_argument, 0, 'l'},
+    struct sys_getopt_state *state;
+    static const struct sys_getopt_option set_options[] = {
+        {"name", sys_getopt_required_argument, 0, 'n'},
+        {"id", sys_getopt_required_argument, 0, 'd'},
+		{"ssid", sys_getopt_required_argument, 0, 's'},
+		{"psk", sys_getopt_required_argument, 0, 'p'},
+		{"apsk", sys_getopt_required_argument, 0, 'a'},
+		{"oscip1", sys_getopt_required_argument, 0, 'i'},
+		{"oscip2", sys_getopt_required_argument, 0, 'o'},
+		{"port1", sys_getopt_required_argument, 0, 'r'},
+		{"port2", sys_getopt_required_argument, 0, 't'},
+        {"enableLibmapper", sys_getopt_required_argument, 0, 'l'},
 		{0, 0, 0, 0}
     };
 
     // Check that I've submitted an argument
 
 
-    while ((opt = getopt_long(argc, argv, "n:d:s:p:a:i:o:r:t:l:", set_options, &opt_index)) != -1) {
-        state = getopt_state_get();
+    while ((opt = sys_getopt_long(argc, argv, "n:d:s:p:a:i:o:r:t:l:", set_options, &opt_index)) != -1) {
+        state = sys_getopt_state_get();
         switch (opt) {
         case 'n':
                 var->name = "DeviceName";
@@ -110,17 +110,17 @@ static int parse_setting_args_get(const struct shell *sh, size_t argc, char *arg
     // Options setup
 	int opt;
 	int opt_index = 0;
-    struct getopt_state *state;
-    static const struct option get_options[] = {
-        {"name", no_argument, 0, 'n'},
-        {"wifi", no_argument, 0, 'w'},
-		{"osc", no_argument, 0, 'o'},
-		{"sensor", no_argument, 0, 's'},
+    struct sys_getopt_state *state;
+    static const struct sys_getopt_option get_options[] = {
+        {"name", sys_getopt_no_argument, 0, 'n'},
+        {"wifi", sys_getopt_no_argument, 0, 'w'},
+		{"osc", sys_getopt_no_argument, 0, 'o'},
+		{"sensor", sys_getopt_no_argument, 0, 's'},
 		{0, 0, 0, 0}
     };
 
-    while ((opt = getopt_long(argc, argv, "nwos", get_options, &opt_index)) != -1) {
-        state = getopt_state_get();
+    while ((opt = sys_getopt_long(argc, argv, "nwos", get_options, &opt_index)) != -1) {
+        state = sys_getopt_state_get();
         switch (opt) {
         case 'n':
                 var_names->push_back("DeviceName");
@@ -203,7 +203,8 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t pe
             sensor_settings = puara_module.getSensorSettings();
             for (auto sensor: sensor_settings) {
                 shell_info(sh, "\n%s Settings", sensor.name.c_str());
-                for (auto setting: sensor.nested_settings) {
+                for (int i = 0; i < sensor.count; i++) {
+                    puara_child_settings setting = sensor.nested_settings[i];
                     if (setting.type == "text") {
                         char temp[PUARA_MAX_CONFIG_LENGTH];
                         puara_module.getVar(setting.name, &temp, setting.size);

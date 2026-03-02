@@ -46,11 +46,13 @@
 #include <zephyr/fs/littlefs.h>
 #endif
 
+// Constants
 #define STORAGE_PARTITION	storage_partition
 #define STORAGE_PARTITION_ID	FIXED_PARTITION_ID(STORAGE_PARTITION)
 #define PUARA_MAX_CONFIG_LENGTH 32
 #define PUARA_MAX_ID_LENGTH 3
 #define PUARA_MAX_ARRAY_SIZE 32
+#define PUARA_WIFI_CONNECTION_TIMEOUT 30
 
 // Get header for parsing JSON objects (to parse settings)
 #include <zephyr/data/json.h>
@@ -84,12 +86,32 @@ struct puara_child_settings {
     std::string type;
     size_t size;
     void *value;
+    std::string str_value;
 };
+
+// Structure to define sensor setting value
+struct puara_sensor_settings {
+    std::string name;
+    std::string description;
+    std::string type;	
+    size_t size;
+	std::string str_value;
+	int int_value;
+	float float_value;
+	float float_arr[PUARA_MAX_ARRAY_SIZE];
+};
+
 
 struct puara_parent_settings {
     std::string name;
     std::string description;
-    std::vector<puara_child_settings> nested_settings;
+    int count;
+    puara_child_settings nested_settings[PUARA_MAX_NESTED_SETTINGS];
+};
+
+struct puara_device_settings {
+    settingsVariables settings[PUARA_MAX_ARRAY_SIZE];
+    size_t settings_len;
 };
 
 // MACROS for ease of use
@@ -115,6 +137,7 @@ class Puara {
         static std::vector<puara_parent_settings> parent_variables;
         static std::vector<puara_child_settings> variables;
         static std::unordered_map<std::string,int> variables_fields;
+        static puara_device_settings device_config;
 
         std::unordered_map<std::string,int> config_fields = {
             // Networking Settings
@@ -150,6 +173,7 @@ class Puara {
         static bool enableLibmapper;
         int localPORT;
         
+        // WiFi Properties
         bool StaIsConnected;
         bool ApStarted;
         static bool persistentAP;
@@ -159,14 +183,13 @@ class Puara {
         std::string currentAP_IP;
         std::string currentAP_MAC;
         const int wifiScanSize = 20;
-        std::string wifiAvailableSsid;
-        
-        // Wifi properties
+        static std::string wifiAvailableSsid;
         static bool wifi_enabled;
         static bool ap_enabled;
+
+        // WiFi Settings
         struct net_if *sta_iface;
         struct net_if *ap_iface;
-        struct net_mgmt_event_callback cb;
         wifi_connect_req_params wifi_config_sta;
         wifi_connect_req_params wifi_config_ap;
         const short int channel = 6;
@@ -174,15 +197,24 @@ class Puara {
         const short int wifi_maximum_retry = 5;
         short int connect_counter;
 
+        // WiFi Event callback structures
+        struct net_mgmt_event_callback cb; // WiFi Connection events
+        static struct net_mgmt_event_callback wifi_scan_cb; // WiFi Scan events
+
         // Storage settings
-        const bool spiffs_format_if_mount_failed = false;
         std::string config_str = "config/";
         static char tmp_setting[PUARA_MAX_CONFIG_LENGTH];
 
         // Wifi Setup
         void wifi_init();
-        static void wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface);
         void enable_dhcpv4_server();
+        // WiFi Event handlers
+        static void wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface);
+        static void wifi_mgmt_scan_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event, struct net_if *iface);
+
+        // Handlers for scan event results
+        static void handle_wifi_scan_done(struct net_mgmt_event_callback *cb);
+        static void handle_wifi_scan_result(struct net_mgmt_event_callback *cb);
 
         // Storage callback handlers
         static int puara_config_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg);
@@ -198,12 +230,14 @@ class Puara {
             .h_set = puara_variable_set,
         };
 
-        // Webserver helpers
-        std::string prepare_index();
-        void find_and_replace(std::string old_text, std::string new_text, std::string &str);
-        void find_and_replace(std::string old_text, double new_number, std::string &str);
-        void find_and_replace(std::string old_text, unsigned int new_number, std::string &str);
-        void checkmark(std::string old_text, bool value, std::string & str);
+        // Webserver handlers
+        static int deviceconfig_handler(struct http_client_ctx *client, enum http_transaction_status status,
+			  const struct http_request_ctx *request_ctx,
+			  struct http_response_ctx *response_ctx, void *user_data);
+        static int sensorsettings_handler(struct http_client_ctx *client, enum http_transaction_status status,
+			  const struct http_request_ctx *request_ctx,
+			  struct http_response_ctx *response_ctx, void *user_data);
+
 
         // Reboot functions
         const int reboot_delay = 3000;
@@ -263,14 +297,13 @@ class Puara {
 
         // Wifi methods
         void start_wifi();
-        void start_mdns_service(const char * device_name, const char * instance_name);
-        void start_mdns_service(std::string device_name, std::string instance_name);
         void wifi_scan();
         void sta_connect();
         void ap_connect();
         bool get_StaIsConnected();
         bool IP1_ready();
         bool IP2_ready();
+        bool libmapper_ready();
 
         // Convertion method
         std::string convertToString(char* a);
@@ -290,7 +323,7 @@ class Puara {
         int get(settingsVariables *var);
 
         // Setup storage
-        void config_storage();
+        void configure_storage(std::vector<puara_parent_settings> sensor_settings);
 
         // Reboot system
         void reboot_with_delay();

@@ -14,13 +14,20 @@ Edu Meneses (2022) - https://www.edumeneses.com
 
 #include <puara.h>
 
-LOG_MODULE_REGISTER(puara_module);
+LOG_MODULE_REGISTER(PUARA_MODULE);
 
 #define MACSTR "%02X:%02X:%02X:%02X:%02X:%02X"
+
+// WiFi Event Masks
 #define NET_EVENT_WIFI_MASK                                                                        \
 	(NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT |                        \
 	 NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                      \
 	 NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED)
+#define PUARA_WIFI_SCAN_EVENTS (                   \
+				NET_EVENT_WIFI_SCAN_RESULT        |\
+				NET_EVENT_WIFI_SCAN_DONE          |\
+				NET_EVENT_WIFI_RAW_SCAN_RESULT)
+
 
 #define WIFI_AP_IP_ADDRESS "192.168.4.1"
 #define WIFI_AP_NETMASK    "255.255.255.0"
@@ -40,135 +47,10 @@ int Puara::id = 1;
 std::vector<puara_parent_settings> Puara::parent_variables = {};
 std::vector<puara_child_settings> Puara::variables = {};
 std::unordered_map<std::string,int> Puara::variables_fields = {};
+puara_device_settings Puara::device_config = {};
 int Puara::http_service_port = 80;
-
-// Webserver resources
-uint8_t Puara::index_html_gz[] = {
-#include "index.html.gz.inc"
-};
-uint8_t Puara::factory_html_gz[] = {
-#include "factory.html.gz.inc"
-};
-uint8_t Puara::reboot_html_gz[] = {
-#include "reboot.html.gz.inc"
-};
-uint8_t Puara::saved_html_gz[] = {
-#include "saved.html.gz.inc"
-};
-uint8_t Puara::scan_html_gz[] = {
-#include "scan.html.gz.inc"
-};
-uint8_t Puara::settings_html_gz[] = {
-#include "settings.html.gz.inc"
-};
-uint8_t Puara::update_html_gz[] = {
-#include "update.html.gz.inc"
-};
-uint8_t Puara::style_css_gz[] = {
-#include "style.css.gz.inc"
-};
-// Static HTTP resources
-http_resource_detail_static Puara::index_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = index_html_gz,
-	.static_data_len = sizeof(index_html_gz),
-};
-http_resource_detail_static Puara::reboot_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = reboot_html_gz,
-	.static_data_len = sizeof(reboot_html_gz),
-};
-http_resource_detail_static Puara::factory_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = factory_html_gz,
-	.static_data_len = sizeof(factory_html_gz),
-};
-http_resource_detail_static Puara::saved_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = saved_html_gz,
-	.static_data_len = sizeof(saved_html_gz),
-};
-http_resource_detail_static Puara::scan_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = scan_html_gz,
-	.static_data_len = sizeof(scan_html_gz),
-};
-http_resource_detail_static Puara::settings_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_POST),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = settings_html_gz,
-	.static_data_len = sizeof(settings_html_gz),
-};
-http_resource_detail_static Puara::update_html_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/html",
-		},
-	.static_data = update_html_gz,
-	.static_data_len = sizeof(update_html_gz),
-};
-http_resource_detail_static Puara::style_css_gz_resource_detail = {
-	.common = {
-            .bitmask_of_supported_http_methods = BIT(HTTP_GET),
-			.type = HTTP_RESOURCE_TYPE_STATIC,
-			.content_encoding = "gzip",
-			.content_type = "text/css",
-		},
-	.static_data = style_css_gz,
-	.static_data_len = sizeof(style_css_gz),
-};
-
-// Define HTTP Services
-HTTP_SERVICE_DEFINE(puara_service, NULL, &Puara::http_service_port,
-		    CONFIG_HTTP_SERVER_MAX_CLIENTS, 10, NULL, NULL, NULL);
-
-HTTP_RESOURCE_DEFINE(index_html_gz_resource, puara_service, "/",
-		     &Puara::index_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(factory_html_gz_resource, puara_service, "/factory",
-		     &Puara::factory_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(reboot_html_gz_resource, puara_service, "/reboot",
-		     &Puara::reboot_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(saved_html_gz_resource, puara_service, "/saved",
-		     &Puara::saved_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(scan_html_gz_resource, puara_service, "/scan",
-		     &Puara::scan_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(settings_html_gz_resource, puara_service, "/settings",
-		     &Puara::settings_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(update_html_gz_resource, puara_service, "/update",
-		     &Puara::update_html_gz_resource_detail);
-HTTP_RESOURCE_DEFINE(style_css_gz_resource, puara_service, "/style.css",
-		     &Puara::style_css_gz_resource_detail);
+std::string Puara::wifiAvailableSsid;
+net_mgmt_event_callback Puara::wifi_scan_cb;
 
 unsigned int Puara::get_version() {
     return version;
@@ -178,7 +60,7 @@ void Puara::set_version(unsigned int user_version) {
     version = user_version;
 };
 
-void Puara::start(std::vector<puara_parent_settings> sensor_setings, Monitors monitor) {
+void Puara::start(std::vector<puara_parent_settings> sensor_settings, Monitors monitor) {
     std::cout 
     << "\n"
     << "**********************************************************\n"
@@ -190,14 +72,36 @@ void Puara::start(std::vector<puara_parent_settings> sensor_setings, Monitors mo
     << "**********************************************************\n"
     << std::endl;
 
+    // Configure filesystem for storing variables
+    configure_storage(sensor_settings);
+      
+    // Setup storage
+    settings_subsys_init();
+    settings_register(&puara_config); // register settings
+    settings_register(&puara_variables); // register variables
+    settings_load();
+
+    // Setup WiFi
+    start_wifi();
+    // start_webserver();
+
+    // Setup serial monitor
+    module_monitor = monitor;
+
+    // some delay added as start listening blocks the hw monitor
+    std::cout << "Puara Start Done!\n\n  Type \"puara reboot\" in the serial monitor to reset the controller.\n\n";
+}
+
+void Puara::configure_storage(std::vector<puara_parent_settings> sensor_settings) {
     // Get variables for the device
-    if (sensor_setings.size() > 0) {
-        for (auto parent_temp: sensor_setings) {
+    if (sensor_settings.size() > 0) {
+        for (auto parent_temp: sensor_settings) {
             parent_variables.push_back(parent_temp);
 
             // Get every child variable in the parent variable structure
-            if (parent_temp.nested_settings.size() > 0) {
-                for (auto temp: parent_temp.nested_settings) {
+            if (parent_temp.count > 0) {
+                for (int i = 0; i < parent_temp.count; i++) {
+                    puara_child_settings temp = parent_temp.nested_settings[i];
                     if (variables_fields.find(temp.name) == variables_fields.end()) {
                         variables_fields.insert({temp.name, variables.size()});
                         variables.push_back(temp);
@@ -216,15 +120,30 @@ void Puara::start(std::vector<puara_parent_settings> sensor_setings, Monitors mo
     settings_register(&puara_variables); // register variables
     settings_load();
 
-    start_wifi();
-    start_webserver();
-    start_mdns_service(dmiName, dmiName);
-    wifi_scan();
+    // Set up config structure
+    std::vector<std::string> var_names = {"SSID", "APpasswd", "oscIP1", "oscPORT1", "oscIP2", "oscPORT2", "enableLibmapper", "password", "DeviceName", "DeviceID"};
+    int idx = 0;
+    int ret = 0;
+    for (auto varName: var_names) {
+        // Setup dummy variable and add the variable name
+        settingsVariables var;
+        var.name = varName;
 
-    module_monitor = monitor;
+        // Get variable from storage
+        ret = get(&var);
+        if (ret == 0) {
+            // Save variable to device settings
+            device_config.settings[idx] = var;
 
-    // some delay added as start listening blocks the hw monitor
-    std::cout << "Puara Start Done!\n\n  Type \"puara reboot\" in the serial monitor to reset the controller.\n\n";
+            // Update index
+            idx++;
+        } else {
+            LOG_ERR("Error in getting variable: %s", var.name.c_str());
+        }
+    }
+
+    // Update number of device settings
+    device_config.settings_len = idx + 1;
 }
 
 void Puara::sta_connect() {
@@ -261,6 +180,9 @@ void Puara::wifi_init() {
     // Adding network call back events
     net_mgmt_init_event_callback(&cb, wifi_event_handler, NET_EVENT_WIFI_MASK);
 	net_mgmt_add_event_callback(&cb);
+
+    // Initialise event callback for wifi scan results
+    net_mgmt_init_event_callback(&wifi_scan_cb, wifi_mgmt_scan_event_handler, PUARA_WIFI_SCAN_EVENTS);
 
     // Wait for iface to be initialised
     sta_iface = net_if_get_wifi_sta();
@@ -301,6 +223,10 @@ void Puara::start_wifi() {
 
     ApStarted = false;
 
+    // Set wifi and ap enabled to false
+    wifi_enabled = false;
+    ap_enabled = false;
+
     // Check if device name is empty
     if (strlen(device) == 0) {
         std::cout << "start_wifi: Module name unpopulated. Using default name: Puara" << std::endl;
@@ -338,6 +264,7 @@ void Puara::start_wifi() {
 	wifi_config_sta.band = WIFI_FREQ_BAND_UNKNOWN;
     wifi_config_sta.bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ;
     wifi_config_sta.mfp = WIFI_MFP_OPTIONAL;
+    wifi_config_sta.timeout = PUARA_WIFI_CONNECTION_TIMEOUT;
 
     // Configure wifi ap settings
     // Default to a 5GHz Soft access point on channel 149
@@ -360,61 +287,7 @@ std::string Puara::get_dmi_name() {
     return dmiName;
 }
 
-void Puara::find_and_replace(std::string old_text, std::string new_text, std::string & str) {
-
-    std::size_t old_text_position = str.find(old_text);
-    while (old_text_position!=std::string::npos) {
-        str.replace(old_text_position,old_text.length(),new_text);
-        old_text_position = str.find(old_text);
-    }
-    std::cout << "http (find_and_replace): Success" << std::endl;
-}
-
-void Puara::find_and_replace(std::string old_text, double new_number, std::string & str) {
-
-    std::size_t old_text_position = str.find(old_text);
-    while (old_text_position!=std::string::npos) {
-        std::string conversion = std::to_string(new_number);
-        str.replace(old_text_position,old_text.length(),conversion);
-        old_text_position = str.find(old_text);
-    }
-    std::cout << "http (find_and_replace): Success" << std::endl;
-}
-
-void Puara::find_and_replace(std::string old_text, unsigned int new_number, std::string & str) {
-
-    std::size_t old_text_position = str.find(old_text);
-    while (old_text_position!=std::string::npos) {
-        std::string conversion = std::to_string(new_number);
-        str.replace(old_text_position,old_text.length(),conversion);
-        old_text_position = str.find(old_text);
-    }
-    std::cout << "http (find_and_replace): Success" << std::endl;
-}
-
-void Puara::checkmark(std::string old_text, bool value, std::string & str) {
-
-    std::size_t old_text_position = str.find(old_text);
-    if (old_text_position!=std::string::npos) {
-        std::string conversion;
-        if (value) {
-            conversion = "checked";
-        } else {
-            conversion = "";
-        }
-        str.replace(old_text_position,old_text.length(),conversion);
-        std::cout << "http (checkmark): Success" << std::endl;
-    } else {
-        std::cout << "http (checkmark): Could not find the requested string" << std::endl;
-    }
-}
-
 int Puara::start_webserver(void) {    
-    // if (!ApStarted) {
-    //     std::cout << "start_webserver: Cannot start webserver: AP and STA not initializated" << std::endl;
-    //     return NULL;
-    // }
-    
     // Start webserver
     http_server_start();
 
@@ -423,7 +296,7 @@ int Puara::start_webserver(void) {
 
 void Puara::stop_webserver(void) {
     // Stop the httpd server
-    // httpd_stop(webserver);
+    http_server_stop();
 }
 std::string Puara::convertToString(char* a) {
     std::string s(a);
@@ -439,54 +312,18 @@ void Puara::reboot_with_delay() {
     sys_reboot(SYS_REBOOT_COLD);
 }
 
-void Puara::start_mdns_service(const char * device_name, const char * instance_name) {
-    // //initialize mDNS service
-    // esp_err_t err = mdns_init();
-    // if (err) {
-    //     std::cout << "MDNS Init failed: " << err << std::endl;
-    //     return;
-    // }
-    // //set hostname
-    // ESP_ERROR_CHECK(mdns_hostname_set(device_name));
-    // //set default instance
-    // ESP_ERROR_CHECK(mdns_instance_name_set(instance_name));
-    // std::cout << "MDNS Init completed. Device name: " << device_name << "\n" << std::endl;
-}
-
-void Puara::start_mdns_service(std::string device_name, std::string instance_name) {
-    // //initialize mDNS service
-    // esp_err_t err = mdns_init();
-    // if (err) {
-    //     std::cout << "MDNS Init failed: " << err << std::endl;
-    //     return;
-    // }
-    // //set hostname
-    // ESP_ERROR_CHECK(mdns_hostname_set(device_name.c_str()));
-    // //set default instance
-    // ESP_ERROR_CHECK(mdns_instance_name_set(instance_name.c_str()));
-    // std::cout << "MDNS Init completed. Device name: " << device_name << "\n" << std::endl;
-}
-
 void Puara::wifi_scan(void) {
-    // uint16_t number = wifiScanSize;
-    // wifi_ap_record_t ap_info[wifiScanSize];
-    // uint16_t ap_count = 0;
-    // memset(ap_info, 0, sizeof(ap_info));
+	struct wifi_scan_params params;
+    net_mgmt_add_event_callback(&wifi_scan_cb);
 
-    // esp_wifi_scan_start(NULL, true);
-    // ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
-    // ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-    // std::cout << "wifi_scan: Total APs scanned = " << ap_count << std::endl;
-    // wifiAvailableSsid.clear();
-    // for (int i = 0; (i < wifiScanSize) && (i < ap_count); i++) {
-    //     wifiAvailableSsid.append("<strong>SSID: </strong>");
-    //     wifiAvailableSsid.append(reinterpret_cast<const char*>(ap_info[i].ssid));
-    //     wifiAvailableSsid.append("<br>      (RSSI: ");
-    //     wifiAvailableSsid.append(std::to_string(ap_info[i].rssi));
-    //     wifiAvailableSsid.append(", Channel: ");
-    //     wifiAvailableSsid.append(std::to_string(ap_info[i].primary));
-    //     wifiAvailableSsid.append(")<br>");
-    // }
+    // Reset availableSSID string
+    wifiAvailableSsid = "";
+
+    if (net_mgmt(NET_REQUEST_WIFI_SCAN, sta_iface, &params, sizeof(params))) {
+        LOG_WRN("Scan request failed\n");
+    }
+
+    LOG_INF("Scan requested\n");
 }
 
 std::string Puara::urlDecode(std::string text) {
@@ -813,9 +650,11 @@ int Puara::get(settingsVariables *var) {
             break;
         case puara_keys::OSC_PORT1:
             var->textValue = std::to_string(oscPORT1);
+            var->numberValue = oscPORT1;
             break;
         case puara_keys::OSC_PORT2:
             var->textValue = std::to_string(oscPORT2);
+            var->numberValue = oscPORT2;
             break;
         case puara_keys::ENABLE_LIBMAPPER:
             if (enableLibmapper) {
@@ -823,9 +662,11 @@ int Puara::get(settingsVariables *var) {
             } else {
                 var->textValue = "DISABLED";
             }
+            var->numberValue = enableLibmapper;
             break;
         case puara_keys::DEVICE_ID:
             var->textValue = std::to_string(id);
+            var->numberValue = id;
             break;
         default:
             var->textValue = "NULL";
@@ -908,14 +749,43 @@ bool Puara::IP2_ready() {
     }
 }
 
+bool Puara::libmapper_ready() {
+    return enableLibmapper;
+}
+
 // Wifi handlers
 void Puara::wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
 			       struct net_if *iface)
 {
 	switch (mgmt_event) {
 	case NET_EVENT_WIFI_CONNECT_RESULT: {
-		LOG_INF("Connected to %s", wifiSSID);
-        wifi_enabled = true;
+        struct wifi_status *connect_status = (struct wifi_status *)cb->info;
+
+        // Print log message depending on connection status
+        switch (connect_status->conn_status)
+        {
+        case WIFI_STATUS_CONN_SUCCESS:
+            LOG_INF("Connected to %s", wifiSSID);
+            wifi_enabled = true;
+            break;
+        case WIFI_STATUS_CONN_WRONG_PASSWORD:
+            LOG_INF("Failed to connect to %s. Incorrect Password", wifiSSID);
+            wifi_enabled = false;
+            break;
+        case WIFI_STATUS_CONN_TIMEOUT:
+            LOG_INF("Failed to connect to %s. Connection Timeout", wifiSSID);
+            wifi_enabled = false;
+            break;
+        case WIFI_STATUS_CONN_AP_NOT_FOUND:
+            LOG_INF("Failed to connect to %s. Access point not found", wifiSSID);
+            wifi_enabled = false;
+            break;
+        case WIFI_STATUS_CONN_FAIL:
+        default:
+            LOG_INF("Failed to connect to %s", wifiSSID);
+            wifi_enabled = false;
+            break;
+        }
 		break;
 	}
 	case NET_EVENT_WIFI_DISCONNECT_RESULT: {
@@ -925,7 +795,7 @@ void Puara::wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 	}
 	case NET_EVENT_WIFI_AP_ENABLE_RESULT: {
 		LOG_INF("AP Mode is enabled. Waiting for station to connect");
-        wifi_enabled = false;
+        ap_enabled = true;
 		break;
 	}
 	case NET_EVENT_WIFI_AP_DISABLE_RESULT: {
@@ -951,17 +821,65 @@ void Puara::wifi_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 		break;
 	}
 }
+
+void Puara::wifi_mgmt_scan_event_handler(struct net_mgmt_event_callback *cb,
+					 uint64_t mgmt_event, struct net_if *iface)
+{
+	switch (mgmt_event) {
+	case NET_EVENT_WIFI_SCAN_RESULT:
+		handle_wifi_scan_result(cb);
+		break;
+	case NET_EVENT_WIFI_SCAN_DONE:
+		handle_wifi_scan_done(cb);
+		break;
+	default:
+		break;
+	}
+}
+
+void Puara::handle_wifi_scan_done(struct net_mgmt_event_callback *cb)
+{
+	const struct wifi_status *status =
+    (const struct wifi_status *)cb->info;
+
+	if (status->status) {
+		LOG_WRN("Scan request failed (%d)\n", status->status);
+	} else {
+		LOG_DBG("Scan request done\n");
+	}
+
+	net_mgmt_del_event_callback(&wifi_scan_cb);
+}
+
+void Puara::handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
+{
+	const struct wifi_scan_result *entry =
+		(const struct wifi_scan_result *)cb->info;
+	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+
+    // Add result to available SSIDs
+    wifiAvailableSsid.append("<strong>SSID: </strong>");
+    wifiAvailableSsid.append(reinterpret_cast<const char*>(entry->ssid));
+    wifiAvailableSsid.append("<br>      (RSSI: ");
+    wifiAvailableSsid.append(std::to_string(entry->rssi));
+    wifiAvailableSsid.append(", Channel: ");
+    wifiAvailableSsid.append(std::to_string(entry->channel));
+    wifiAvailableSsid.append(")<br>");
+}
+
+
+
 void Puara::enable_dhcpv4_server(void)
 {
-	static struct in_addr addr;
-	static struct in_addr netmaskAddr;
+	static struct net_in_addr addr;
+	static struct net_in_addr netmaskAddr;
 
-	if (net_addr_pton(AF_INET, WIFI_AP_IP_ADDRESS, &addr)) {
+	if (net_addr_pton(NET_AF_INET, WIFI_AP_IP_ADDRESS, &addr)) {
 		LOG_ERR("Invalid address: %s", WIFI_AP_IP_ADDRESS);
 		return;
 	}
 
-	if (net_addr_pton(AF_INET, WIFI_AP_NETMASK, &netmaskAddr)) {
+	if (net_addr_pton(NET_AF_INET, WIFI_AP_NETMASK, &netmaskAddr)) {
 		LOG_ERR("Invalid netmask: %s", WIFI_AP_NETMASK);
 		return;
 	}
