@@ -95,7 +95,7 @@ void Puara::start(std::vector<puara_parent_settings> sensor_settings, Monitors m
 void Puara::configure_storage(std::vector<puara_parent_settings> sensor_settings) {
     // Get variables for the device
     if (sensor_settings.size() > 0) {
-        for (auto parent_temp: sensor_settings) {
+        for (auto& parent_temp: sensor_settings) {
             parent_variables.push_back(parent_temp);
 
             // Get every child variable in the parent variable structure
