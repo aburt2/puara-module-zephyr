@@ -14,14 +14,12 @@ Edu Meneses (2022) - https://www.edumeneses.com
 
 #include <puara.h>
 
-LOG_MODULE_REGISTER(puara_module);
-
 #define MACSTR "%02X:%02X:%02X:%02X:%02X:%02X"
 #define NET_EVENT_WIFI_MASK                                                                        \
 	(NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT |                        \
 	 NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                      \
 	 NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED)
-
+#define L4_EVENT_MASK (NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED)
 #define WIFI_AP_IP_ADDRESS "192.168.4.1"
 #define WIFI_AP_NETMASK    "255.255.255.0"
 // Declare static variables
@@ -35,6 +33,11 @@ char Puara::oscIP2[PUARA_MAX_CONFIG_LENGTH] = "0.0.0.0";
 unsigned int Puara::oscPORT1 = 8000;
 unsigned int Puara::oscPORT2 = 8000;
 
+// sempharoe for wifi conenction
+static K_SEM_DEFINE(network_connected, 0, 1);
+static K_SEM_DEFINE(ap_connected, 0, 1);
+
+
 unsigned int Puara::get_version() {
     return version;
 };
@@ -47,7 +50,7 @@ void Puara::start(Monitors monitor) {
     std::cout 
     << "\n"
     << "**********************************************************\n"
-    << "* Puara Module Manager                                   *\n"
+    << "* Puara Module Manager - Zephyr                          *\n"
     << "* Metalab - Société des Arts Technologiques (SAT)        *\n"
     << "* Input Devices and Music Interaction Laboratory (IDMIL) *\n"
     << "* Edu Meneses (2022) - https://www.edumeneses.com        *\n"
@@ -68,7 +71,7 @@ void Puara::start(Monitors monitor) {
     module_monitor = monitor;
     
     // some delay added as start listening blocks the hw monitor
-    std::cout << "Puara Start Done!\n\n  Type \"reboot\" in the serial monitor to reset the ESP32.\n\n";
+    std::cout << "Puara Start Done!\n\n  Type \"puara reboot\" in the serial monitor to reset the device.\n\n";
 }
 
 void Puara::sta_connect() {
@@ -77,21 +80,22 @@ void Puara::sta_connect() {
 			   sizeof(struct wifi_connect_req_params));
 
     if (ret) {
-		LOG_ERR("Unable to Connect to (%s)", wifiSSID);
+		printk("Unable to Connect to (%s)\n", wifiSSID);
 	}
+
+    // Wait for network
+    wait_for_network();
 }
 
 void Puara::ap_connect() {
     int ret = 0;
 	ret = net_mgmt(NET_REQUEST_WIFI_AP_ENABLE, ap_iface, &wifi_config_ap,
 			   sizeof(struct wifi_connect_req_params));
-    
-    // Enable DHCPV4 Server
-    enable_dhcpv4_server();
 
     if (ret) {
-		LOG_ERR("NET_REQUEST_WIFI_AP_ENABLE failed, err: %d", ret);
+		printk("NET_REQUEST_WIFI_AP_ENABLE failed, err: %d\n", ret);
 	}
+    k_sem_take(&ap_connected, K_FOREVER);
 }
 
 void Puara::wifi_init() {
@@ -102,21 +106,28 @@ void Puara::wifi_init() {
     // Wait for iface to be initialised
     sta_iface = net_if_get_wifi_sta();
     while (!sta_iface) {
-        LOG_INF("STA: is not initialized");
+        printk("STA: is not initialized\n");
         sta_iface = net_if_get_wifi_sta();
     }
-    LOG_INF("STA: is initialized");
+    printk("STA: is initialized\n");
 
     // Wait for ap to be initialised
     ap_iface = net_if_get_wifi_sap();
     while (!ap_iface) {
-        LOG_INF("AP: is not initialized");
+        printk("AP: is not initialized\n");
         ap_iface = net_if_get_wifi_sap();
     }
-    LOG_INF("AP: is initialized");
+    printk("AP: is initialized\n");
+
+    // Disable wifi power saving
+    disable_wifi_ps();
 
     // Connect to wifi
     sta_connect();
+    k_msleep(500);
+
+    // Connecto to access point
+    ap_connect();
 }
 
 void Puara::start_wifi() {
@@ -159,7 +170,7 @@ void Puara::start_wifi() {
 	wifi_config_ap.ssid_length = dmiName.length();
 	wifi_config_ap.psk = (const uint8_t *)APpasswd;
 	wifi_config_ap.psk_length = strlen(APpasswd);
-	wifi_config_ap.channel = WIFI_CHANNEL_ANY;
+	wifi_config_ap.channel = 11;
 	wifi_config_ap.band = WIFI_FREQ_BAND_2_4_GHZ;
     wifi_config_ap.bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ;
 
@@ -775,7 +786,7 @@ std::string Puara::urlDecode(std::string text) {
 }
 
 bool Puara::get_StaIsConnected() {
-    StaIsConnected = wifi_enabled && !ap_enabled;
+    StaIsConnected = wifi_enabled;
     return StaIsConnected;
 }
 
@@ -1065,76 +1076,69 @@ void Puara::wifi_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt
 {
 	switch (mgmt_event) {
 	case NET_EVENT_WIFI_CONNECT_RESULT: {
-		LOG_INF("Connected to %s", wifiSSID);
-        wifi_enabled = true;
+		printk("Connected to %s\n", wifiSSID);
 		break;
 	}
 	case NET_EVENT_WIFI_DISCONNECT_RESULT: {
-		LOG_INF("Disconnected from %s", wifiSSID);
-        wifi_enabled = false;
+		printk("Disconnected from %s\n", wifiSSID);
 		break;
 	}
 	case NET_EVENT_WIFI_AP_ENABLE_RESULT: {
-		LOG_INF("AP Mode is enabled. Waiting for station to connect");
-        wifi_enabled = false;
+		printk("AP Mode is enabled. Waiting for station to connect\n");
+        ap_enabled = true;
+        k_sem_give(&ap_connected);
 		break;
 	}
 	case NET_EVENT_WIFI_AP_DISABLE_RESULT: {
-		LOG_INF("AP Mode is disabled.");
+		printk("AP Mode is disabled.\n");
         ap_enabled = false;
-		break;
-	}
-	case NET_EVENT_WIFI_AP_STA_CONNECTED: {
-		struct wifi_ap_sta_info *sta_info = (struct wifi_ap_sta_info *)cb->info;
-
-		LOG_INF("station: " MACSTR " joined ", sta_info->mac[0], sta_info->mac[1],
-			sta_info->mac[2], sta_info->mac[3], sta_info->mac[4], sta_info->mac[5]);
-		break;
-	}
-	case NET_EVENT_WIFI_AP_STA_DISCONNECTED: {
-		struct wifi_ap_sta_info *sta_info = (struct wifi_ap_sta_info *)cb->info;
-
-		LOG_INF("station: " MACSTR " leave ", sta_info->mac[0], sta_info->mac[1],
-			sta_info->mac[2], sta_info->mac[3], sta_info->mac[4], sta_info->mac[5]);
 		break;
 	}
 	default:
 		break;
 	}
 }
-void Puara::enable_dhcpv4_server(void)
+
+void Puara::wait_for_network(void)
 {
-	static struct in_addr addr;
-	static struct in_addr netmaskAddr;
+	net_mgmt_init_event_callback(&l4_cb, l4_event_handler, L4_EVENT_MASK);
+	net_mgmt_add_event_callback(&l4_cb);
 
-	if (net_addr_pton(AF_INET, WIFI_AP_IP_ADDRESS, &addr)) {
-		LOG_ERR("Invalid address: %s", WIFI_AP_IP_ADDRESS);
-		return;
+	printk("Waiting for network...\n");
+
+	k_sem_take(&network_connected, K_FOREVER);
+}
+void Puara::l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event, struct net_if *iface)
+{
+	switch (event) {
+	case NET_EVENT_L4_CONNECTED:
+		printk("Network connectivity established and IP address assigned\n");
+        wifi_enabled = true;
+		k_sem_give(&network_connected);
+		break;
+	case NET_EVENT_L4_DISCONNECTED:
+		break;
+	default:
+		break;
+	}
+}
+
+int Puara::disable_wifi_ps() {
+    struct wifi_ps_params params;
+
+    // Setup power saving config
+    params.enabled = WIFI_PS_DISABLED;
+    params.type = WIFI_PS_PARAM_STATE;
+    
+    // Request disabling power saving
+    if (net_mgmt(NET_REQUEST_WIFI_PS, sta_iface, &params, sizeof(params))) {
+		printk("PS %s failed. Reason: %s\n",
+			   params.enabled ? "enable" : "disable\n",
+			   wifi_ps_get_config_err_code_str(params.fail_reason));
+		return -ENOEXEC;
 	}
 
-	if (net_addr_pton(AF_INET, WIFI_AP_NETMASK, &netmaskAddr)) {
-		LOG_ERR("Invalid netmask: %s", WIFI_AP_NETMASK);
-		return;
-	}
-
-	net_if_ipv4_set_gw(ap_iface, &addr);
-
-	if (net_if_ipv4_addr_add(ap_iface, &addr, NET_ADDR_MANUAL, 0) == NULL) {
-		LOG_ERR("unable to set IP address for AP interface");
-	}
-
-	if (!net_if_ipv4_set_netmask_by_addr(ap_iface, &addr, &netmaskAddr)) {
-		LOG_ERR("Unable to set netmask for AP interface: %s", WIFI_AP_NETMASK);
-	}
-
-	addr.s4_addr[3] += 10; /* Starting IPv4 address for DHCPv4 address pool. */
-
-	if (net_dhcpv4_server_start(ap_iface, &addr) != 0) {
-		LOG_ERR("DHCP server is not started for desired IP");
-		return;
-	}
-
-	LOG_INF("DHCPv4 server started...\n");
+    return 0;
 }
 
 // Create a version of the class

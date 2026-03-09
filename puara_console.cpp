@@ -17,7 +17,9 @@ static int parse_setting_args_get(const struct shell *sh, size_t argc, char *arg
 
 // Define shell commands
 static int cmd_reboot_device(const struct shell *sh, size_t argc, char **argv, uint32_t period) {
-    puara_module.reboot_with_delay();
+    std::cout << "Rebooting system" << std::endl;
+    k_msleep(500);
+    sys_reboot(SYS_REBOOT_COLD);
     return 0;
 }
 
@@ -145,6 +147,9 @@ static int cmd_set(const struct shell *sh, size_t argc, char **argv, uint32_t pe
     if (parse_setting_args_set(sh, argc, argv, &var) != 0) {
         return -EINVAL;
     }
+    if (var.name.empty()) {
+        return -EINVAL;
+    }
     ret = puara_module.set(var);
 
     if (ret) {
@@ -160,6 +165,9 @@ static int cmd_get(const struct shell *sh, size_t argc, char **argv, uint32_t pe
     settingsVariables var;
     int ret = 0;
     if (parse_setting_args_get(sh, argc, argv, &var) != 0) {
+        return -EINVAL;
+    }
+    if (var.name.empty()) {
         return -EINVAL;
     }
     ret = puara_module.get(&var);
@@ -179,7 +187,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_puara_commands,
         SHELL_CMD(reboot, NULL, "Reboot device", cmd_reboot_device),
         SHELL_CMD(ping, NULL, "Ping command.", cmd_puara_ping),
         SHELL_CMD(whoareyou, NULL, "Returns device name.", cmd_whoareyou),
-        SHELL_CMD(set, NULL, "Set device setting\n"
+        SHELL_CMD_ARG(set, NULL, "Set device setting\n"
                                 "<-s --ssid \"<SSID>\">: SSID.\n"
                                 "[-p, --psk]: SSID Password (valid only for secure SSIDs)\n"
                                 "[-a, --apsk]: AP Password\n"
@@ -187,8 +195,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_puara_commands,
                                 "[-o, --oscip2]: OSC IP address 2\n"
                                 "[-r, --port1]: OSC port for IP address 1\n"
                                 "[-t, --port2]: OSC port for IP address 2\n",
-                                cmd_set),
-        SHELL_CMD(get, NULL, "Set device setting\n"
+                                cmd_set,1, 7),
+        SHELL_CMD_ARG(get, NULL, "Set device setting\n"
                                 "<-s --ssid \"<SSID>\">: SSID.\n"
                                 "[-p, --psk]: SSID Password (valid only for secure SSIDs)\n"
                                 "[-a, --apsk]: AP Password\n"
@@ -196,7 +204,7 @@ SHELL_STATIC_SUBCMD_SET_CREATE(sub_puara_commands,
                                 "[-o, --oscip2]: OSC IP address 2\n"
                                 "[-r, --port1]: OSC port for IP address 1\n"
                                 "[-t, --port2]: OSC port for IP address 2\n",
-                                cmd_get),
+                                cmd_get,1, 7),
 	SHELL_SUBCMD_SET_END /* Array terminated. */
 );
 

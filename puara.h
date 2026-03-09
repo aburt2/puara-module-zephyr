@@ -21,7 +21,6 @@
 #include <vector>
 #include <unordered_map>
 
-
 // Need to be included for Zephyr Shell Commands
 #include <zephyr/kernel.h>
 #include <zephyr/devicetree.h>
@@ -32,6 +31,7 @@
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/dhcpv4_server.h>
+#include <zephyr/net/conn_mgr_connectivity.h>
 
 // Needed for settings
 #include <zephyr/settings/settings.h>
@@ -125,6 +125,7 @@ class Puara {
         const short int max_connection = 5;
         const short int wifi_maximum_retry = 5;
         short int connect_counter;
+        struct net_mgmt_event_callback l4_cb;
 
         // Storage settings
         const bool spiffs_format_if_mount_failed = false;
@@ -154,6 +155,11 @@ class Puara {
         void find_and_replace(std::string old_text, double new_number, std::string &str);
         void find_and_replace(std::string old_text, unsigned int new_number, std::string &str);
         void checkmark(std::string old_text, bool value, std::string & str);
+
+        // Wifi setting
+        int disable_wifi_ps();
+        void wait_for_network(void);
+        static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event, struct net_if *iface);
 
         // Reboot functions
         const int reboot_delay = 3000;
